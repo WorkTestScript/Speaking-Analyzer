@@ -3,7 +3,7 @@ import { alignTokens, tokenizeWithOffsets } from "./pronunciation.js";
 import { decodeTo16kMono, sliceWord, wordRange } from "./audio-utils.js";
 import { ARPA_TO_IPA, loadCmuDict, stripStress, stressPattern } from "./cmudict.js";
 import { alignPhonemes, classifyPhonemeResult } from "./phoneme-align.js";
-import { loadRecognizer, recognizePhonemes } from "./phoneme-recognizer.js";
+import { loadRecognizer, recognizePhonemes } from "./phoneme-recognizer.js?v=simd-fallback-20261030";
 import { getSettings } from "./config.js";
 import { mapPhonemeErrorsToSyllables } from "./syllable-utils.js?v=syllable-highlight-20261030";
 
