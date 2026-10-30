@@ -37,6 +37,7 @@ export async function loadRecognizer(onProgress = () => {}) {
     }).catch((error) => {
       recognizerPromise = null;
       const runtime = useSimd ? "SIMD" : "non-SIMD (legacy)";
+      console.error(`ONNX phoneme model failed with the ${runtime} runtime:`, error);
       throw new Error(`Failed to load the ONNX phoneme model using the ${runtime} runtime: ${error.message}`);
     });
   }
