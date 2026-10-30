@@ -52,7 +52,13 @@ async function monitorSilence() {
     if (!recording || !stream) return;
     silenceAnalyser = silenceContext.createAnalyser();
     silenceAnalyser.fftSize = 2048;
-    silenceContext.createMediaStreamSource(stream).connect(silenceAnalyser);
+    // Ignore low-frequency room and mains hum when deciding whether speech is present.
+    // The filter is only used by the silence monitor; the recorded audio stays untouched.
+    const speechFilter = silenceContext.createBiquadFilter();
+    speechFilter.type = "highpass";
+    speechFilter.frequency.value = 120;
+    speechFilter.Q.value = 0.707;
+    silenceContext.createMediaStreamSource(stream).connect(speechFilter).connect(silenceAnalyser);
     const samples = new Uint8Array(silenceAnalyser.fftSize);
     const check = () => {
       if (!recording || !silenceAnalyser || silenceStopTriggered) return;
