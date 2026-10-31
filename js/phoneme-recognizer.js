@@ -1,10 +1,10 @@
 const MODEL_ID = "robg/speako-phoneme-recognizer";
-// Transformers.js 3.7.2 bundles a recent ONNX Runtime Web build that expects
-// WebAssembly SIMD. The legacy build uses ONNX Runtime Web 1.14.0, which ships
-// a baseline (non-SIMD) wasm binary for older browsers.
+// Modern browsers run the model in-page. Browsers without WebAssembly SIMD
+// use the local native server, avoiding the browser's 32-bit WASM heap limit.
 const SIMD_TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2";
-const LEGACY_TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+const LOCAL_SERVER_URL = "http://127.0.0.1:8765";
 let recognizerPromise = null;
+let useLocalServer = false;
 
 function supportsWasmSimd() {
   if (typeof WebAssembly === "undefined" || typeof WebAssembly.validate !== "function") return false;
@@ -24,19 +24,25 @@ function supportsWasmSimd() {
 export async function loadRecognizer(onProgress = () => {}) {
   if (!recognizerPromise) {
     const useSimd = supportsWasmSimd();
-    const transformersUrl = useSimd ? SIMD_TRANSFORMERS_URL : LEGACY_TRANSFORMERS_URL;
-    recognizerPromise = import(transformersUrl).then(({ pipeline, env }) => {
-      env.allowLocalModels = false;
-      const modelOptions = useSimd
-        ? { dtype: "q8", device: "wasm" }
-        : { quantized: true };
-      return pipeline("automatic-speech-recognition", MODEL_ID, {
-        ...modelOptions,
-        progress_callback: onProgress,
+    useLocalServer = !useSimd;
+    const initialize = useSimd
+      ? import(SIMD_TRANSFORMERS_URL).then(({ pipeline, env }) => {
+        env.allowLocalModels = false;
+        return pipeline("automatic-speech-recognition", MODEL_ID, {
+          dtype: "q8",
+          device: "wasm",
+          progress_callback: onProgress,
+        });
+      })
+      : fetch(`${LOCAL_SERVER_URL}/health`).then(async (response) => {
+        if (!response.ok) throw new Error(`Local model server returned HTTP ${response.status}.`);
+        const health = await response.json();
+        if (!health.ready) throw new Error(health.error || "The local model server is not ready.");
+        return { localServer: true };
       });
-    }).catch((error) => {
+    recognizerPromise = initialize.catch((error) => {
       recognizerPromise = null;
-      const runtime = useSimd ? "SIMD" : "non-SIMD (legacy)";
+      const runtime = useSimd ? "SIMD" : "local server";
       console.error(`ONNX phoneme model failed with the ${runtime} runtime:`, error);
       throw new Error(`Failed to load the ONNX phoneme model using the ${runtime} runtime: ${error.message}`);
     });
@@ -46,6 +52,22 @@ export async function loadRecognizer(onProgress = () => {}) {
 
 export async function recognizePhonemes(float32, onProgress) {
   const recognizer = await loadRecognizer(onProgress);
+  if (useLocalServer) {
+    const audio = float32 instanceof Float32Array ? float32 : new Float32Array(float32);
+    const body = new ArrayBuffer(4 + 4 + audio.byteLength);
+    const view = new DataView(body);
+    view.setUint32(0, 1, true); // one segment in this request
+    view.setUint32(4, audio.length, true);
+    new Uint8Array(body, 8).set(new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength));
+    const response = await fetch(`${LOCAL_SERVER_URL}/recognize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Local model server returned HTTP ${response.status}.`);
+    return result.text || "";
+  }
   const result = await recognizer(float32);
   return result.text || "";
 }

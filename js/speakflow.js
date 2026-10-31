@@ -1,6 +1,6 @@
 import { initConfig, getSettings, updateSettings, MODELS } from "./config.js";
 import { transcribeAudio } from "./api/provider.js";
-import { speakGoogleAmerican, pauseGoogleSpeech, resumeGoogleSpeech, stopGoogleSpeech, setGoogleSpeechRate } from "./google-tts.js?v=tts-rate-fix-1";
+import { speakGoogleAmerican, stopGoogleSpeech, setGoogleSpeechRate } from "./google-tts.js?v=tts-rate-fix-1";
 
 const $ = (id) => document.getElementById(id);
 const LIST_KEY = "speakflow.phrases.v1";
@@ -13,8 +13,8 @@ let stream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let recording = false;
+let typingIntent = false;
 let ttsBusy = false;
-let speechPaused = false;
 let advancePending = false;
 let advanceTimer = null;
 let autoAdvance = true;
@@ -132,18 +132,30 @@ function scheduleAutomaticAdvance(phraseIndex) {
   }, 1000);
 }
 function cleanAudio() { stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
+function stopRecordingForTyping() {
+  typingIntent = true;
+  if (!recording) {
+    if (silenceContext) { void silenceContext.close().catch(() => {}); silenceContext = null; }
+    return;
+  }
+  recording = false; stopSilenceMonitor();
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.ondataavailable = null; mediaRecorder.onstop = null; mediaRecorder.stop();
+  }
+  mediaRecorder = null; audioChunks = [];
+  if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; }
+  $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer";
+  announce("Recording stopped. Type your answer.");
+}
 function renderList() {
   const list = $("list-preview"); list.replaceChildren();
   if (!phrases.length) { list.innerHTML = '<div class="empty-state">Your validated phrase list will be saved in this browser.</div>'; $("phrase-count").textContent = "0 phrases"; }
   else {
-    const pageStart = Math.floor(index / 10) * 10;
-    phrases.slice(pageStart, pageStart + 10).forEach((phrase, offset) => {
-      const phraseIndex = pageStart + offset;
+    phrases.forEach((phrase, phraseIndex) => {
       const row = document.createElement("div"); row.className = "phrase-row"; row.dataset.current = String(phraseIndex === index);
       row.innerHTML = `<span class="row-index">${phraseIndex + 1}</span><strong></strong>`; row.querySelector("strong").textContent = phrase.en; list.append(row);
     });
-    const first = pageStart + 1; const last = Math.min(pageStart + 10, phrases.length);
-    $("phrase-count").textContent = phrases.length > 10 ? `${first}–${last} of ${phrases.length}` : `${phrases.length} phrase${phrases.length === 1 ? "" : "s"}`;
+    $("phrase-count").textContent = `${phrases.length} phrase${phrases.length === 1 ? "" : "s"}`;
   }
   $("progress-badge").textContent = phrases.length ? `${Math.min(index + 1, phrases.length)} / ${phrases.length}` : "No phrase list";
 }
@@ -152,14 +164,28 @@ function renderPhrase() {
   advancePending = false;
   updateAdvanceControls();
   $("answer-correct").hidden = true;
-  cleanAudio(); stopGoogleSpeech(); ttsBusy = false; speechPaused = false;
+  cleanAudio(); stopGoogleSpeech(); ttsBusy = false;
   const phrase = phrases[index];
-  $("phrase-text").textContent = phrase?.en || "Load a phrase list to get started.";
+  renderPhraseWords(phrase?.en || "Load a phrase list to get started.");
   $("phrase-text").classList.add("is-hidden"); $("reveal-text").setAttribute("aria-label", "Show phrase"); $("reveal-text").title = "Show phrase";
   $("phrase-translation").textContent = phrase?.ua || ""; $("phrase-translation").hidden = !phrase?.ua;
   $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-text").disabled = !phrase; $("record-answer").disabled = !phrase || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("skip-phrase").disabled = !phrase;
-  $("phrase-play").disabled = !phrase; $("phrase-pause").disabled = true; $("phrase-pause").innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>'; $("phrase-pause").setAttribute("aria-label", "Pause speech"); $("phrase-stop").disabled = true;
+  $("phrase-play").disabled = !phrase; setPhrasePlayState(false);
   $("word-feedback").replaceChildren(); announce(""); renderList();
+}
+function renderPhraseWords(text) {
+  const target = $("phrase-text"); target.replaceChildren();
+  const pattern = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu; let cursor = 0; let match;
+  while ((match = pattern.exec(text))) {
+    target.append(document.createTextNode(text.slice(cursor, match.index)));
+    const word = document.createElement("button"); word.type = "button"; word.className = "phrase-word"; word.textContent = match[0]; word.dataset.word = match[0]; word.setAttribute("aria-label", `Play ${match[0]}`); target.append(word); cursor = match.index + match[0].length;
+  }
+  target.append(document.createTextNode(text.slice(cursor)));
+}
+function setPhrasePlayState(playing) {
+  const button = $("phrase-play");
+  button.innerHTML = playing ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  button.setAttribute("aria-label", playing ? "Stop phrase" : "Play phrase"); button.title = playing ? "Stop phrase" : "Play phrase";
 }
 function compare() {
   const expected = normalize(phrases[index]?.en || ""); const actual = normalize($("answer-text").value);
@@ -210,7 +236,7 @@ async function importFile(file) {
   } catch (error) { toast(`Could not open phrase list: ${error.message || "The file is invalid."}`); }
   finally { $("json-file").value = ""; }
 }
-async function recordAnswer() {
+async function recordAnswer(automatic = false) {
   if (recording) {
     recording = false; stopSilenceMonitor(); $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Transcribing answer"); $("record-answer").title = "Transcribing answer"; $("record-answer").disabled = true;
     try {
@@ -219,21 +245,24 @@ async function recordAnswer() {
       stream?.getTracks().forEach((track) => track.stop()); stream = null; mediaRecorder = null; audioChunks = [];
       if (!blob.size) throw new Error("No audio was captured.");
       if (audioUrl) URL.revokeObjectURL(audioUrl);
-      audioUrl = URL.createObjectURL(blob); answerPlayback = new Audio(audioUrl); $("play-answer-recording").disabled = false;
+      audioUrl = URL.createObjectURL(blob); answerPlayback = new Audio(audioUrl); answerPlayback.volume = Number($("recording-volume").value); $("play-answer-recording").disabled = false;
       answerPlayback.onended = () => setAnswerPlaybackIcon(false);
       const result = await transcribeAudio(blob, blob.type || "audio/webm", { language: "en-US" });
       if (!result.text?.trim() || /^\s*\[?\s*blank[\s_-]*audio\s*\]?\s*$/i.test(result.text)) throw new Error("No speech detected. Start recording and speak clearly, or type your answer.");
       lastRecognitionModel = result.model || ""; updateRecognitionModel();
-      $("answer-text").value = result.text.trim(); compare();
+      if (!typingIntent) { $("answer-text").value = result.text.trim(); compare(); }
     } catch (error) { toast(error.message || String(error)); }
     finally { mediaRecorder = null; audioChunks = []; $("record-answer").disabled = !phrases[index] || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; }
     return;
   }
+  if (automatic && typingIntent) return;
   try {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("Microphone recording is not supported in this browser.");
+    $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("word-feedback").replaceChildren(); $("answer-correct").hidden = true; advancePending = false; clearTimeout(advanceTimer); advanceTimer = null; updateAdvanceControls();
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) { silenceContext = new AudioContextClass(); if (silenceContext.state !== "running") await silenceContext.resume(); }
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (typingIntent) { stream.getTracks().forEach((track) => track.stop()); stream = null; announce("Recording stopped. Type your answer."); return; }
     const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
     const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported(type));
     mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream); audioChunks = [];
@@ -250,14 +279,26 @@ function bind() {
   updateRecognitionModel();
   $("tts-rate").addEventListener("change", () => setGoogleSpeechRate($("tts-rate").value));
   $("theme-toggle").addEventListener("click", () => { const dark = document.documentElement.dataset.theme !== "dark"; const theme = dark ? "dark" : "light"; document.documentElement.dataset.theme = theme; try { localStorage.setItem(THEME_KEY, theme); } catch {} $("theme-toggle").setAttribute("aria-pressed", String(dark)); $("theme-toggle").title = dark ? "Switch to light theme" : "Switch to dark theme"; });
-  $("open-json").addEventListener("click", () => $("json-file").click()); $("json-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
+  $("open-list").addEventListener("click", () => $("list-modal").showModal()); $("close-list").addEventListener("click", () => $("list-modal").close()); $("open-json").addEventListener("click", () => $("json-file").click()); $("json-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
   $("reveal-text").addEventListener("click", () => { const hidden = $("phrase-text").classList.toggle("is-hidden"); $("reveal-text").setAttribute("aria-label", hidden ? "Show phrase" : "Hide phrase"); $("reveal-text").title = hidden ? "Show phrase" : "Hide phrase"; });
-  $("phrase-play").addEventListener("click", async () => { const phrase = phrases[index]; if (!phrase) return; stopGoogleSpeech(); ttsBusy = true; speechPaused = false; $("phrase-pause").disabled = false; $("phrase-stop").disabled = false; try { await speakGoogleAmerican(phrase.en, { rate: Number($("tts-rate").value) }); } catch (error) { if (ttsBusy) toast(error.message || String(error)); } finally { if (ttsBusy) { ttsBusy = false; speechPaused = false; $("phrase-pause").disabled = true; $("phrase-stop").disabled = true; } } });
-  $("phrase-pause").addEventListener("click", async () => { if (speechPaused) { await resumeGoogleSpeech(); speechPaused = false; $("phrase-pause").innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>'; $("phrase-pause").setAttribute("aria-label", "Pause speech"); } else { pauseGoogleSpeech(); speechPaused = true; $("phrase-pause").innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>'; $("phrase-pause").setAttribute("aria-label", "Resume speech"); } });
-  $("phrase-stop").addEventListener("click", () => { ttsBusy = false; speechPaused = false; stopGoogleSpeech(); $("phrase-pause").disabled = true; $("phrase-stop").disabled = true; });
+  $("phrase-play").addEventListener("click", async () => {
+    typingIntent = false;
+    const phrase = phrases[index]; if (!phrase) return;
+    if (ttsBusy) { ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false); return; }
+    stopGoogleSpeech(); ttsBusy = true; setPhrasePlayState(true);
+    try { await speakGoogleAmerican(phrase.en, { rate: Number($("tts-rate").value) }); }
+    catch (error) { if (ttsBusy) toast(error.message || String(error)); }
+    finally { if (ttsBusy) { ttsBusy = false; setPhrasePlayState(false); if (autoAdvance && phrases[index] === phrase) void recordAnswer(true); } }
+  });
+  $("phrase-text").addEventListener("click", async (event) => {
+    const word = event.target.closest(".phrase-word")?.dataset.word; if (!word) return;
+    ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false);
+    try { await speakGoogleAmerican(word, { rate: Number($("tts-rate").value) }); } catch (error) { toast(error.message || String(error)); }
+  });
+  $("answer-text").addEventListener("focus", stopRecordingForTyping);
   $("answer-text").addEventListener("input", () => { if ($("answer-text").value.trim()) compare(); else { $("word-feedback").replaceChildren(); renderHighlights(); announce(""); } });
   $("answer-text").addEventListener("scroll", () => { $("answer-highlight").scrollTop = $("answer-text").scrollTop; });
-  $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", recordAnswer);
+  $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; void recordAnswer(); });
   $("manual-next").addEventListener("click", () => { if (!autoAdvance && advancePending) advancePhrase(); });
   $("toggle-auto-next").addEventListener("click", () => {
     autoAdvance = !autoAdvance;
@@ -273,10 +314,11 @@ function bind() {
     if (!answerPlayback.paused) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); return; }
     try { await answerPlayback.play(); setAnswerPlaybackIcon(true); } catch (error) { toast(error.message || "Could not play this recording."); }
   });
+  $("recording-volume").addEventListener("input", () => { if (answerPlayback) answerPlayback.volume = Number($("recording-volume").value); });
   $("open-settings").addEventListener("click", () => { applySettings(); $("settings-modal").showModal(); }); $("close-settings").addEventListener("click", () => $("settings-modal").close());
   ["setting-provider", "setting-gemini", "setting-groq"].forEach((id) => $(id).addEventListener(id === "setting-provider" ? "change" : "input", () => { saveSettings(); if (id === "setting-provider") { lastRecognitionModel = ""; updateRecognitionModel(); } }));
   $("settings-modal").addEventListener("click", (event) => { if (event.target === $("settings-modal")) $("settings-modal").close(); });
-  try { phrases = validateList(JSON.parse(localStorage.getItem(LIST_KEY) || "[]")); restoreProgress(); $("list-status").textContent = phrases.length ? "Restored from this browser." : "Open a JSON file with English phrases to begin."; } catch { phrases = []; index = 0; try { localStorage.removeItem(LIST_KEY); } catch {} }
+  try { phrases = validateList(JSON.parse(localStorage.getItem(LIST_KEY) || "[]")); restoreProgress(); $("list-status").textContent = phrases.length ? `${phrases.length} phrases loaded.` : "Open a JSON file with English phrases to begin."; } catch { phrases = []; index = 0; try { localStorage.removeItem(LIST_KEY); } catch {} }
   renderPhrase();
 }
 document.addEventListener("DOMContentLoaded", bind);
