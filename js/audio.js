@@ -11,7 +11,6 @@ function pickMimeType() {
   if (!window.MediaRecorder) return "";
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
-
 export function recordingSupported() {
   return Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 }
@@ -30,7 +29,6 @@ export class AudioRecorder {
     this.raf = 0;
     this.playback = null;
     this.current = null;
-    this.onLevel = () => {};
     this.onDuration = () => {};
     this.onState = () => {};
   }
@@ -60,7 +58,6 @@ export class AudioRecorder {
     this.startedAt = Date.now();
     this.durationMs = 0;
     this.mediaRecorder.start(200);
-    this.startMeter();
     this.timer = setInterval(() => {
       this.durationMs = Date.now() - this.startedAt;
       this.onDuration(this.durationMs);
@@ -181,23 +178,6 @@ export class AudioRecorder {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
-  startMeter() {
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = this.audioContext.createMediaStreamSource(this.stream);
-    this.analyser = this.audioContext.createAnalyser();
-    this.analyser.fftSize = 512;
-    source.connect(this.analyser);
-    const data = new Uint8Array(this.analyser.fftSize);
-    const tick = () => {
-      if (!this.analyser) return;
-      this.analyser.getByteTimeDomainData(data);
-      const avg = data.reduce((sum, sample) => sum + Math.abs(sample - 128), 0) / data.length / 128;
-      this.onLevel(avg, data);
-      this.raf = requestAnimationFrame(tick);
-    };
-    tick();
-  }
-
   cleanupStream() {
     clearInterval(this.timer);
     this.timer = null;
@@ -210,33 +190,6 @@ export class AudioRecorder {
       this.audioContext.close().catch(() => {});
       this.audioContext = null;
     }
-    this.onLevel(0, []);
     this.onState({ recording: false });
   }
-}
-
-export async function playSlice(blob, startSec, endSec, padBefore = 0.025, padAfter = 0) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
-  const start = Math.max(0, (startSec ?? 0) - padBefore);
-  const end = Math.min(buffer.duration, (endSec ?? buffer.duration) + padAfter);
-  const duration = Math.max(0.05, end - start);
-  const fade = Math.min(0.01, duration / 2); // 10 ms fade in/out, same as the slice sent to the model
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  const gain = ctx.createGain();
-  const t0 = ctx.currentTime;
-  gain.gain.setValueAtTime(0, t0);
-  gain.gain.linearRampToValueAtTime(1, t0 + fade);
-  gain.gain.setValueAtTime(1, t0 + duration - fade);
-  gain.gain.linearRampToValueAtTime(0, t0 + duration);
-  source.connect(gain);
-  gain.connect(ctx.destination);
-  source.start(t0, start, duration);
-  return new Promise((resolve) => {
-    source.onended = () => {
-      ctx.close().catch(() => {});
-      resolve();
-    };
-  });
 }

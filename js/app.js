@@ -5,12 +5,8 @@ import {
   PROVIDERS,
 } from "./config.js";
 import { loadDraft, saveDraft, saveAnalysisSnapshot, loadAnalysisSnapshot, deleteAnalysisSnapshot } from "./storage.js";
-import { AudioRecorder, recordingSupported, playSlice } from "./audio.js";
+import { AudioRecorder, recordingSupported } from "./audio.js";
 import { analyzeText, applySpanFix, shiftIssues } from "./text-analysis.js?v=gemini-timeout-fallback-20261030";
-import { wordDetails } from "./pronunciation.js";
-import { analyzePhonemes } from "./phoneme-assessment.js?v=syllable-highlight-20261030";
-import { listEnglishVoices, speakWord } from "./phonetics.js";
-import { speakGoogleAmerican, stopGoogleSpeech } from "./google-tts.js";
 import { testConnection, transcribeAudio } from "./api/provider.js?v=gemini-timeout-fallback-20261030";
 import { messageFor } from "./errors.js";
 
@@ -32,16 +28,55 @@ function applyTheme(theme) {
 
 const state = {
   analysis: null,
-  textAnalysisHidden: false,
-  pronunciation: null,
+  retainedLevel: null,
+  retainedLevelText: null,
   selectedIssue: null,
-  selectedWord: null,
-  busy: { text: false, pronunciation: false, test: false },
+  busy: { text: false, test: false },
 };
 
 const recorder = new AudioRecorder();
 const modalScrollPositions = new WeakMap();
 let messageResolver = null;
+let historyAudioUrl = null;
+
+function showLoadedRecordingPlayer() {
+  const blob = recorder.current?.blob;
+  if (!blob) return;
+  const player = $("history-audio-player");
+  const waveform = $("waveform");
+  player.pause();
+  if (historyAudioUrl) URL.revokeObjectURL(historyAudioUrl);
+  historyAudioUrl = URL.createObjectURL(blob);
+  player.src = historyAudioUrl;
+  player.hidden = false;
+  waveform.hidden = true;
+}
+
+function hideLoadedRecordingPlayer() {
+  const player = $("history-audio-player");
+  const waveform = $("waveform");
+  player.pause();
+  player.removeAttribute("src");
+  player.load();
+  player.hidden = true;
+  waveform.hidden = false;
+  if (historyAudioUrl) URL.revokeObjectURL(historyAudioUrl);
+  historyAudioUrl = null;
+}
+
+function setRecordButtonState(recording) {
+  const button = $("btn-record");
+  button.setAttribute("aria-pressed", String(recording));
+  button.setAttribute("aria-label", recording ? "Stop recording" : "Start recording");
+  button.title = recording ? "Stop recording" : "Start recording";
+}
+
+function setPlayButtonState(playing) {
+  const button = $("btn-play");
+  button.setAttribute("aria-label", playing ? "Stop playback" : "Play recording");
+  button.title = playing ? "Stop playback" : "Play recording";
+  button.dataset.playing = String(playing);
+}
 
 function showDialog(dialog) {
   modalScrollPositions.set(dialog, { x: window.scrollX, y: window.scrollY });
@@ -81,7 +116,7 @@ function toast(message, kind = "info") {
   clearTimeout(toast._t);
   toast._t = setTimeout(() => {
     el.hidden = true;
-  }, 4200);
+  }, 2100);
 }
 
 function wordCount(text) {
@@ -91,7 +126,20 @@ function wordCount(text) {
 function updateCounts() {
   const text = $("source-text").value;
   $("stat-words").textContent = String(wordCount(text));
-  if ($("stat-level")) $("stat-level").textContent = state.analysis?.source === text ? state.analysis.cefr.overall : "—";
+  const currentAnalysis = state.analysis?.source === text ? state.analysis : null;
+  if (state.retainedLevelText !== text) {
+    state.retainedLevel = null;
+    state.retainedLevelText = null;
+  }
+  if ($("stat-level")) $("stat-level").textContent = currentAnalysis?.cefr.overall || state.retainedLevel || "—";
+  if ($("analysis-success")) {
+    const issues = currentAnalysis
+      ? [...currentAnalysis.grammarErrors, ...currentAnalysis.sentenceStructure, ...currentAnalysis.vocabulary]
+      : [];
+    const correctedText = currentAnalysis?.correctedText?.trim();
+    const hasCorrection = Boolean(correctedText && correctedText !== currentAnalysis?.source?.trim());
+    $("analysis-success").hidden = !currentAnalysis || issues.length > 0 || hasCorrection;
+  }
   saveDraft(text);
 }
 
@@ -117,9 +165,12 @@ function empty(container, title, body) {
 }
 
 function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
+  const isSvgElement = tag === "svg" || tag === "path";
+  const node = isSvgElement
+    ? document.createElementNS("http://www.w3.org/2000/svg", tag)
+    : document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
-    if (key === "class") node.className = value;
+    if (key === "class") node.setAttribute("class", value);
     else if (key === "text") node.textContent = value;
     else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2), value);
     else if (value === false || value == null) continue;
@@ -127,6 +178,61 @@ function el(tag, attrs = {}, children = []) {
   }
   for (const child of children) node.append(child);
   return node;
+}
+
+function wordDiff(original, suggested) {
+  const wordPattern = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu;
+  const originalWords = [...original.matchAll(wordPattern)];
+  const suggestedWords = [...suggested.matchAll(wordPattern)];
+  const originalChanged = new Set();
+  const suggestedChanged = new Set();
+  const n = originalWords.length;
+  const m = suggestedWords.length;
+
+  if (n * m <= 1_000_000) {
+    const lcs = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i -= 1) {
+      for (let j = m - 1; j >= 0; j -= 1) {
+        lcs[i][j] = originalWords[i][0] === suggestedWords[j][0]
+          ? lcs[i + 1][j + 1] + 1
+          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (originalWords[i][0] === suggestedWords[j][0]) {
+        i += 1;
+        j += 1;
+      } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+        originalChanged.add(i++);
+      } else {
+        suggestedChanged.add(j++);
+      }
+    }
+    while (i < n) originalChanged.add(i++);
+    while (j < m) suggestedChanged.add(j++);
+  } else {
+    originalWords.forEach((_, index) => originalChanged.add(index));
+    suggestedWords.forEach((_, index) => suggestedChanged.add(index));
+  }
+
+  return { originalWords, suggestedWords, originalChanged, suggestedChanged };
+}
+
+function renderDiffText(text, words, changed, className) {
+  const fragment = document.createDocumentFragment();
+  let cursor = 0;
+  words.forEach((word, index) => {
+    const start = word.index;
+    const end = start + word[0].length;
+    fragment.append(text.slice(cursor, start));
+    if (changed.has(index)) fragment.append(el("span", { class: className, text: word[0] }));
+    else fragment.append(word[0]);
+    cursor = end;
+  });
+  fragment.append(text.slice(cursor));
+  return fragment;
 }
 
 function renderTextAnalysis() {
@@ -137,21 +243,36 @@ function renderTextAnalysis() {
     panel.hidden = true;
     root.replaceChildren();
     $("text-actions").hidden = true;
-    $("stat-level").textContent = "—";
+    $("stat-level").textContent = state.retainedLevelText === $("source-text").value ? state.retainedLevel || "—" : "—";
+    $("analysis-success").hidden = true;
     return;
   }
-  panel.hidden = state.textAnalysisHidden;
-  $("text-actions").hidden = false;
   root.replaceChildren();
 
   $("stat-level").textContent = analysis.cefr.overall;
-  root.replaceChildren(el("h2", { text: "Errors found" }));
   const issues = [...analysis.grammarErrors, ...analysis.sentenceStructure, ...analysis.vocabulary];
-  if (!issues.length) root.append(el("p", { text: "No errors found." }));
+  const correctedText = analysis.correctedText?.trim();
+  const hasCorrection = Boolean(correctedText && correctedText !== analysis.source?.trim());
+  const hasReport = issues.length > 0 || hasCorrection;
+  panel.hidden = !hasReport;
+  $("analysis-success").hidden = hasReport;
+  $("text-actions").hidden = !hasReport;
+  $("btn-apply-all").disabled = !hasCorrection;
+  if (issues.length) root.append(el("h2", { class: "report-heading", text: "Errors found" }));
   issues.forEach((issue) => root.append(el("button", {
     class: "issue-item analysis-issue", type: "button", onclick: () => selectIssue(issue),
   }, [el("strong", { text: issue.original }), el("span", { text: `${issue.corrected} · ${issue.explanation}` })])));
-  root.append(el("h3", { text: "Corrected text" }), el("p", { class: "corrected-text", text: analysis.correctedText }));
+  if (hasCorrection) {
+    const diff = wordDiff(analysis.source || "", correctedText);
+    const comparison = el("div", { class: "correction-comparison" });
+    comparison.append(
+      el("p", { class: "diff-label", text: "Your text" }),
+      el("p", { class: "corrected-text diff-text" }, [renderDiffText(analysis.source || "", diff.originalWords, diff.originalChanged, "diff-removed")]),
+      el("p", { class: "diff-label", text: "Suggested correction" }),
+      el("p", { class: "corrected-text diff-text" }, [renderDiffText(correctedText, diff.suggestedWords, diff.suggestedChanged, "diff-added")]),
+    );
+    root.append(el("h3", { class: "report-heading", text: "Corrected text" }), comparison);
+  }
 }
 
 function metric(label, value) {
@@ -231,8 +352,6 @@ async function runTextAnalysis() {
   if (state.busy.text) return;
   const text = $("source-text").value;
   state.busy.text = true;
-  state.textAnalysisHidden = false;
-  $("text-results").closest(".analysis-panel").hidden = false;
   $("btn-analyze").disabled = true;
   $("text-progress").hidden = false;
   setStatus($("text-status"), "Analyzing with " + providerLabel() + "…", "busy");
@@ -245,6 +364,7 @@ async function runTextAnalysis() {
   } catch (error) {
     setStatus($("text-status"), messageFor(error), "error");
     toast(messageFor(error), "error");
+    renderTextAnalysis();
   } finally {
     state.busy.text = false;
     $("btn-analyze").disabled = false;
@@ -278,7 +398,10 @@ function applySelectedFix() {
 
 function applyFullCorrection() {
   if (!state.analysis?.correctedText) return;
-  $("source-text").value = state.analysis.correctedText;
+  const correctedText = state.analysis.correctedText;
+  state.retainedLevel = state.analysis.cefr.overall;
+  state.retainedLevelText = correctedText;
+  $("source-text").value = correctedText;
   state.analysis = null;
   if ($("issue-panel").open) $("issue-panel").close();
   updateCounts();
@@ -286,145 +409,14 @@ function applyFullCorrection() {
   toast("Corrected text applied.", "ok");
 }
 
-function renderPronunciation() {
-  const root = $("pronunciation-results");
-  const data = state.pronunciation;
-  if (!data) {
-    empty(root, "No pronunciation check yet", "Record your reading of the current text, then press Analyze Pronunciation.");
-    return;
-  }
-  root.replaceChildren();
-  const board = el("p", { class: "word-board", "aria-label": "Original text with pronunciation flags" });
-  const source = data.originalText;
-  let cursor = 0;
-  data.originalWords.forEach((word, index) => {
-    if (word.start > cursor) board.append(source.slice(cursor, word.start));
-    const span = el("button", {
-      type: "button",
-      class: `word-chip status-${word.status}`,
-      onclick: () => openWord(index),
-    });
-    const syllables = word.syllableErrors || [];
-    if (syllables.length) {
-      let wordCursor = 0;
-      for (const range of syllables) {
-        span.append(word.text.slice(wordCursor, range.start));
-        const mark = el("span", { class: "mispronounced-syllable" });
-        mark.textContent = word.text.slice(range.start, range.end);
-        span.append(mark);
-        wordCursor = range.end;
-      }
-      span.append(word.text.slice(wordCursor));
-      span.title = "Likely affected syllable; select for details";
-    } else {
-      span.textContent = word.text;
-    }
-    board.append(span);
-    cursor = word.end;
-  });
-  if (cursor < source.length) board.append(source.slice(cursor));
-  root.append(board);
-  if (data.added.length) {
-    const extra = el("section", { class: "result-block" }, [el("h3", { text: "Added in recognition" })]);
-    data.added.forEach((item) => extra.append(el("p", { text: `${item.text} — ${item.label}` })));
-    root.append(extra);
-  }
-}
-
-async function openWord(index) {
-  const word = state.pronunciation.originalWords[index];
-  state.selectedWord = word;
-  showDialog($("word-panel"));
-  $("word-value").textContent = word.text;
-  $("word-status").textContent = word.label;
-  $("word-status").dataset.status = word.status;
-  const editText = (word.phonemeEdits || []).map((edit) => edit.type === "omission"
-    ? `missing ${edit.expected}`
-    : edit.type === "addition" ? `extra sound ${edit.heard}` : `${edit.expected} → ${edit.heard}`).join(", ");
-  const stressText = word.expectedStress?.length
-    ? ` · CMUdict stress: ${word.expectedStress.map((stress, index) => `syllable ${index + 1} (${stress})`).join(", ")}`
-    : "";
-  $("word-uk").textContent = word.referencePhonemes
-    ? `${editText ? `Differences: ${editText}. ` : "No issues detected."}${stressText}`
-    : word.ukrainian || "";
-  $("word-recognized").textContent = word.spokenPhonemes || word.recognized || "—";
-  const affectedSyllables = (word.syllableErrors || []).map(({ start, end }) => word.text.slice(start, end)).filter(Boolean);
-  $("word-syllables-row").hidden = !affectedSyllables.length;
-  $("word-syllables").textContent = affectedSyllables.join(", ");
-  $("word-ipa").previousElementSibling.textContent = word.referencePhonemes ? "Reference phonemes" : "IPA";
-  $("word-recognized").previousElementSibling.textContent = word.spokenPhonemes ? "User pronunciation" : "Recognized as";
-  const details = word.referencePhonemes ? { ipa: "", audioUrl: "", example: "", definition: "" } : await wordDetails(word.text, "en-US");
-  $("word-ipa").textContent = word.referencePhonemes || details.ipa || "Pronunciation unavailable.";
-  $("word-definition").textContent = details.definition || "";
-  $("word-definition").hidden = Boolean(word.referencePhonemes);
-  $("btn-play-ref").hidden = false;
-  $("btn-play-user-word").disabled = !(word.timestamps && state.pronunciation.timestampsAvailable && recorder.current?.blob);
-}
-
-async function clearPronunciationAnalysis() {
-  state.pronunciation = null;
-  state.selectedWord = null;
-  if ($("word-panel").open) $("word-panel").close();
-  setStatus($("pronunciation-status"), "");
-  renderPronunciation();
-  await deleteAnalysisSnapshot("pronunciation");
-}
-
 async function clearTextAnalysis() {
   state.analysis = null;
-  state.textAnalysisHidden = false;
+  state.retainedLevel = null;
+  state.retainedLevelText = null;
   if ($("issue-panel").open) $("issue-panel").close();
+  setStatus($("text-status"), "");
   renderTextAnalysis();
   await deleteAnalysisSnapshot("text");
-}
-
-async function runPronunciation() {
-  if (state.busy.pronunciation) return;
-  if (!recorder.current?.blob) {
-    toast("Record audio first.", "error");
-    return;
-  }
-  state.busy.pronunciation = true;
-  $("btn-analyze-pronunciation").disabled = true;
-  $("pronunciation-progress").hidden = false;
-  $("pronunciation-progress").max = 100;
-  $("pronunciation-progress").value = 0;
-  let analysisCompleted = false;
-  setStatus($("pronunciation-status"), "Loading the model, transcript, and CMUdict…", "busy");
-  try {
-    const result = await analyzePhonemes({
-      blob: recorder.current.blob,
-      mimeType: recorder.current.mimeType,
-      originalText: $("source-text").value,
-      onProgress: (update) => {
-        if (typeof update === "string") setStatus($("pronunciation-status"), update, "busy");
-        else if (update?.message) setStatus($("pronunciation-status"), update.message, "busy");
-        else if (typeof update?.progress === "number") {
-          const value = update.progress <= 1 ? update.progress * 100 : update.progress;
-          $("pronunciation-progress").value = Math.max(0, Math.min(100, value));
-          setStatus($("pronunciation-status"), update.file ? `Downloading model: ${update.file}` : "Downloading ONNX model…", "busy");
-        } else if (update?.file || update?.status) {
-          setStatus($("pronunciation-status"), `${update.file || "ONNX model"}: ${update.status || "downloading"}`, "busy");
-        }
-      },
-    });
-    state.pronunciation = { ...result, recordingId: recorder.current.id ?? null };
-    await saveAnalysisSnapshot("pronunciation", {
-      ...state.pronunciation,
-      blobSkipped: true,
-    });
-    renderPronunciation();
-    setStatus($("pronunciation-status"), "");
-    analysisCompleted = true;
-  } catch (error) {
-    setStatus($("pronunciation-status"), messageFor(error), "error");
-    toast(messageFor(error), "error");
-  } finally {
-    state.busy.pronunciation = false;
-    $("btn-analyze-pronunciation").disabled = false;
-    $("pronunciation-progress").hidden = true;
-    if (analysisCompleted) centerPronunciationResult();
-  }
 }
 
 function formatDuration(ms) {
@@ -432,55 +424,6 @@ function formatDuration(ms) {
   const m = Math.floor(total / 60);
   const s = String(total % 60).padStart(2, "0");
   return `${m}:${s}`;
-}
-
-function drawLevel(level, samples = []) {
-  const canvas = $("waveform");
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width;
-  const h = canvas.height;
-  const mid = h / 2;
-  ctx.clearRect(0, 0, w, h);
-  const styles = getComputedStyle(canvas);
-  ctx.fillStyle = styles.backgroundColor;
-  ctx.fillRect(0, 0, w, h);
-  ctx.beginPath();
-  ctx.moveTo(0, mid);
-  ctx.lineTo(w, mid);
-  ctx.strokeStyle = styles.getPropertyValue("--canvas-line").trim();
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  if (!samples.length) return;
-  const amplitude = Math.max(0.08, Math.min(1, level * 2.2));
-  ctx.beginPath();
-  samples.forEach((sample, index) => {
-    const x = (index / (samples.length - 1)) * w;
-    const y = mid + ((sample - 128) / 128) * (h * 0.43) * Math.max(0.15, amplitude);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = styles.getPropertyValue("--accent").trim();
-  ctx.lineWidth = 2.5;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
-}
-
-function centerPronunciationResult() {
-  const panel = $("pronunciation-panel");
-  const board = $("pronunciation-results").querySelector(".word-board");
-  if (!panel || !board) return;
-  requestAnimationFrame(() => {
-    // Leave room after the analysis panel so it can be scrolled above the
-    // bottom edge instead of being stranded at the end of the document.
-    panel.style.marginBottom = `${Math.ceil(window.innerHeight * 0.65)}px`;
-    requestAnimationFrame(() => {
-      const rect = board.getBoundingClientRect();
-      const targetTop = Math.max(24, window.innerHeight * 0.24);
-      const targetScroll = Math.max(0, window.scrollY + rect.top - targetTop);
-      window.scrollTo({ top: targetScroll, behavior: "smooth" });
-    });
-  });
 }
 
 async function refreshHistory() {
@@ -506,13 +449,11 @@ async function refreshHistory() {
             try {
               const recording = await recorder.load(row.id);
               if (!recording) throw new Error("Recording not found.");
-              await clearPronunciationAnalysis();
+              showLoadedRecordingPlayer();
               await clearTextAnalysis();
               $("btn-play").disabled = false;
-              $("btn-pause-play").disabled = false;
               $("btn-delete-rec").disabled = false;
               $("btn-download").disabled = false;
-              $("btn-analyze-pronunciation").disabled = false;
               let transcript = recording.transcript;
               if (!transcript) {
                 toast("Recording loaded. Transcribing it now…");
@@ -537,42 +478,74 @@ async function refreshHistory() {
           disabled: !row.transcript,
           onclick: async (event) => {
             await recorder.load(row.id);
-            await clearPronunciationAnalysis();
+            showLoadedRecordingPlayer();
             await clearTextAnalysis();
             $("source-text").value = row.transcript;
             updateCounts();
             $("btn-play").disabled = false;
-            $("btn-pause-play").disabled = false;
             $("btn-delete-rec").disabled = false;
             $("btn-download").disabled = false;
-            $("btn-analyze-pronunciation").disabled = false;
             toast("Transcript inserted.", "ok");
           },
         }),
         el("button", {
           type: "button",
-          class: "btn btn-ghost danger",
-          text: "Delete",
+          class: "btn btn-ghost icon-only delete-history-btn",
+          "aria-label": "Delete recording",
+          title: "Delete recording",
           onclick: async () => {
             if (!(await showMessage("Delete this recording?", { title: "Confirm deletion", confirm: true }))) return;
             const id = Number(row.id);
-            const clearsAnalysis = recorder.current?.id === id || state.pronunciation?.recordingId === id;
+            const clearsCurrent = recorder.current?.id === id;
             await recorder.remove(row.id);
-            if (clearsAnalysis) {
-              await clearPronunciationAnalysis();
+            if (clearsCurrent) {
+              hideLoadedRecordingPlayer();
               $("btn-play").disabled = true;
-              $("btn-pause-play").disabled = true;
               $("btn-delete-rec").disabled = true;
               $("btn-download").disabled = true;
-              $("btn-analyze-pronunciation").disabled = true;
             }
             await refreshHistory();
           },
-        }),
+        }, [el("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, [el("path", { d: "M5 7h14M10 4h4m-7 3 1 13h8l1-13M10 10v7m4-7v7" })])]),
       ]),
     ]);
     list.append(item);
   });
+}
+
+async function stopRecording() {
+  const button = $("btn-record");
+  button.disabled = true;
+  try {
+    const rec = await recorder.stop();
+    $("rec-indicator").dataset.on = "false";
+    setRecordButtonState(false);
+    button.disabled = false;
+    $("btn-play").disabled = !rec;
+    $("btn-delete-rec").disabled = !rec;
+    $("btn-download").disabled = !rec;
+    updateCounts();
+    await refreshHistory();
+    if (!rec?.blob) return;
+    toast("Recording saved. Transcribing it for the history…");
+    try {
+      const result = await transcribeAudio(rec.blob, rec.mimeType, { language: "en-US" });
+      const transcript = result.text?.trim();
+      if (!transcript) throw new Error("Could not transcribe the recording.");
+      await recorder.saveTranscript(transcript, rec.id);
+      await refreshHistory();
+      toast("Transcript saved with the recording. Use Insert text when you want to compare against it.", "ok");
+    } catch (error) {
+      await refreshHistory();
+      await showMessage(`The recording was saved and your text was kept. Transcription failed: ${messageFor(error)}`, { title: "Transcription error" });
+    }
+  } catch (error) {
+    $("rec-indicator").dataset.on = "false";
+    setRecordButtonState(false);
+    toast(messageFor(error), "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function fillSettingsForm() {
@@ -580,13 +553,6 @@ function fillSettingsForm() {
   $("setting-provider").value = s.provider;
   $("setting-gemini").value = s.geminiApiKey;
   $("setting-groq").value = s.groqApiKey;
-  $("setting-pad-before").value = String(s.slicePadBeforeMs);
-  $("setting-pad-after").value = String(s.slicePadAfterMs);
-  $("tts-engine").value = s.ttsEngine || "google";
-  fillVoices();
-  if (s.ttsVoiceURI && [...$("tts-voice").options].some((option) => option.value === s.ttsVoiceURI)) $("tts-voice").value = s.ttsVoiceURI;
-  $("setting-pad-before-value").textContent = `${s.slicePadBeforeMs} ms`;
-  $("setting-pad-after-value").textContent = `${s.slicePadAfterMs} ms`;
 }
 
 function saveSettingsFromForm() {
@@ -594,29 +560,8 @@ function saveSettingsFromForm() {
     provider: $("setting-provider").value,
     geminiApiKey: $("setting-gemini").value.trim(),
     groqApiKey: $("setting-groq").value.trim(),
-    slicePadBeforeMs: Number($("setting-pad-before").value),
-    slicePadAfterMs: Number($("setting-pad-after").value),
-    dialect: "en-US",
-    ttsEngine: $("tts-engine").value,
-    ttsVoiceURI: $("tts-voice").value,
   });
   refreshProviderBadge();
-}
-
-function fillVoices() {
-  const select = $("tts-voice");
-  const current = select.value || getSettings().ttsVoiceURI;
-  const googleSelected = $("tts-engine").value === "google";
-  $("tts-voice-control").hidden = googleSelected;
-  if (googleSelected) {
-    select.replaceChildren(el("option", { value: "google-en-US", text: "Google American English" }));
-    return;
-  }
-  const voices = listEnglishVoices();
-  select.replaceChildren(el("option", { value: "", text: voices.length ? "Automatic US English" : "No browser voices available" }));
-  voices.forEach((v) => select.append(el("option", { value: v.voiceURI, text: `${v.name} (${v.lang})` })));
-  if (current && [...select.options].some((option) => option.value === current)) select.value = current;
-  else select.selectedIndex = 0;
 }
 
 function bind() {
@@ -637,115 +582,82 @@ function bind() {
   $("source-text").addEventListener("input", () => {
     updateCounts();
     if (!$("source-text").value.trim()) {
-      void clearPronunciationAnalysis();
       void clearTextAnalysis();
     }
   });
   $("btn-clear").addEventListener("click", async () => {
     $("source-text").value = "";
-    await clearPronunciationAnalysis();
     await clearTextAnalysis();
     updateCounts();
   });
-  $("btn-hide-analysis").addEventListener("click", () => {
-    state.textAnalysisHidden = true;
-    $("text-results").closest(".analysis-panel").hidden = true;
+  $("btn-copy-text").addEventListener("click", async () => {
+    const area = $("source-text");
+    if (!area.value) {
+      toast("There is no text to copy.");
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(area.value);
+      } else {
+        const start = area.selectionStart;
+        const end = area.selectionEnd;
+        area.select();
+        if (!document.execCommand("copy")) throw new Error("Clipboard access is unavailable.");
+        area.setSelectionRange(start, end);
+      }
+      toast("Text copied to clipboard.", "ok");
+    } catch (error) {
+      toast(error.message || "Could not copy the text.", "error");
+    }
   });
+  $("btn-hide-analysis").addEventListener("click", () => { void clearTextAnalysis(); });
   $("btn-analyze").addEventListener("click", runTextAnalysis);
   $("btn-apply-fix").addEventListener("click", applySelectedFix);
   $("btn-apply-all").addEventListener("click", applyFullCorrection);
 
-  recorder.onDuration = (ms) => {
-    $("rec-duration").textContent = formatDuration(ms);
-  };
-  recorder.onLevel = (level, samples) => drawLevel(level, samples);
   recorder.onState = () => {};
 
   $("btn-record").addEventListener("click", async () => {
+    if (recorder.mediaRecorder?.state === "recording") {
+      await stopRecording();
+      return;
+    }
+    const button = $("btn-record");
+    button.disabled = true;
+    hideLoadedRecordingPlayer();
     try {
       await recorder.start($("source-text").value);
       $("rec-indicator").dataset.on = "true";
-      $("btn-stop-rec").disabled = false;
-      $("btn-record").disabled = true;
+      setRecordButtonState(true);
     } catch (error) {
       toast(messageFor(error), "error");
-    }
-  });
-  $("btn-stop-rec").addEventListener("click", async () => {
-    const rec = await recorder.stop();
-    $("rec-indicator").dataset.on = "false";
-    $("btn-record").disabled = false;
-    $("btn-stop-rec").disabled = true;
-    $("btn-play").disabled = !rec;
-    $("btn-pause-play").disabled = !rec;
-    $("btn-delete-rec").disabled = !rec;
-    $("btn-download").disabled = !rec;
-    $("btn-analyze-pronunciation").disabled = !rec;
-    updateCounts();
-    await refreshHistory();
-    if (!rec?.blob) return;
-    toast("Recording saved. Transcribing it for the history…");
-    try {
-      const result = await transcribeAudio(rec.blob, rec.mimeType, { language: "en-US" });
-      const transcript = result.text?.trim();
-      if (!transcript) throw new Error("Could not transcribe the recording.");
-      await recorder.saveTranscript(transcript, rec.id);
-      await refreshHistory();
-      toast("Transcript saved with the recording. Use Insert text when you want to compare against it.", "ok");
-    } catch (error) {
-      await refreshHistory();
-      await showMessage(`The recording was saved and your text was kept. Transcription failed: ${messageFor(error)}`, { title: "Transcription error" });
+    } finally {
+      button.disabled = false;
     }
   });
   $("btn-play").addEventListener("click", () => {
-    if (recorder.playback?.audio?.paused) recorder.resumePlayback();
-    else recorder.play();
+    const player = $("history-audio-player");
+    if (player.hidden) showLoadedRecordingPlayer();
+    if (player.paused) player.play().catch((error) => toast(error.message || "Could not play the recording.", "error"));
+    else player.pause();
   });
-  $("btn-pause-play").addEventListener("click", () => recorder.pausePlayback());
+  $("history-audio-player").addEventListener("play", () => setPlayButtonState(true));
+  $("history-audio-player").addEventListener("pause", () => setPlayButtonState(false));
+  $("history-audio-player").addEventListener("ended", () => setPlayButtonState(false));
   $("btn-delete-rec").addEventListener("click", async () => {
     if (!recorder.current) return;
     if (!(await showMessage("Delete the current recording? Other recordings in history will remain.", { title: "Confirm deletion", confirm: true }))) return;
     const deletedId = recorder.current.id;
     await recorder.remove(deletedId);
     recorder.current = null;
-    await clearPronunciationAnalysis();
+    hideLoadedRecordingPlayer();
     $("btn-play").disabled = true;
-    $("btn-pause-play").disabled = true;
     $("btn-delete-rec").disabled = true;
     $("btn-download").disabled = true;
-    $("btn-analyze-pronunciation").disabled = true;
     await refreshHistory();
   });
   $("btn-download").addEventListener("click", () => recorder.download());
-  $("btn-analyze-pronunciation").addEventListener("click", runPronunciation);
-
-  $("btn-play-user-word").addEventListener("click", async () => {
-    const word = state.selectedWord;
-    if (!word?.timestamps || !recorder.current?.blob) {
-      recorder.play();
-      return;
-    }
-    const range = word.sliceRange;
-    if (range) {
-      // Same fragment that was sent to the ONNX model.
-      await playSlice(recorder.current.blob, range.from, range.to, 0, 0);
-      return;
-    }
-    const settings = getSettings();
-    await playSlice(recorder.current.blob, word.timestamps.start, word.timestamps.end, settings.slicePadBeforeMs / 1000, settings.slicePadAfterMs / 1000);
-  });
-  $("btn-play-ref").addEventListener("click", () => {
-    const word = state.selectedWord;
-    if (!word) return;
-    if ($("tts-engine").value === "google") {
-      window.speechSynthesis?.cancel();
-      speakGoogleAmerican(word.text).catch((error) => toast(error.message || String(error), "error"));
-      return;
-    }
-    stopGoogleSpeech();
-    speakWord(word.text, { dialect: "en-US", voiceURI: $("tts-voice").value });
-  });
-  $("btn-close-word").addEventListener("click", () => $("word-panel").close());
   $("btn-close-issue").addEventListener("click", () => $("issue-panel").close());
   $("message-close").addEventListener("click", () => resolveMessage(false));
   $("message-cancel").addEventListener("click", () => resolveMessage(false));
@@ -756,7 +668,7 @@ function bind() {
     showDialog($("settings-modal"));
   });
   $("close-settings").addEventListener("click", () => $("settings-modal").close());
-  ["setting-gemini", "setting-groq", "setting-pad-before", "setting-pad-after"]
+  ["setting-gemini", "setting-groq"]
     .forEach((id) => $(id).addEventListener("input", saveSettingsFromForm));
   ["setting-provider"].forEach((id) => $(id).addEventListener("change", saveSettingsFromForm));
   $("btn-test-connection").addEventListener("click", async () => {
@@ -773,18 +685,6 @@ function bind() {
     }
   });
 
-  $("tts-engine").value = getSettings().ttsEngine;
-  $("tts-engine").addEventListener("change", () => {
-    fillVoices();
-    saveSettingsFromForm();
-  });
-  $("tts-voice").addEventListener("change", saveSettingsFromForm);
-  [["setting-pad-before", "setting-pad-before-value"], ["setting-pad-after", "setting-pad-after-value"]].forEach(([rangeId, outputId]) => {
-    $(rangeId).addEventListener("input", () => {
-      $(outputId).textContent = `${$(rangeId).value} ms`;
-      saveSettingsFromForm();
-    });
-  });
 
   document.querySelectorAll("dialog").forEach((dialog) => {
     dialog.addEventListener("close", () => {
@@ -801,13 +701,12 @@ function bind() {
     });
   });
 
-  window.speechSynthesis?.addEventListener("voiceschanged", fillVoices);
-  fillVoices();
   restoreSnapshots();
   refreshHistory();
 }
 
 async function restoreSnapshots() {
+  await deleteAnalysisSnapshot("pronunciation");
   const textSnap = await loadAnalysisSnapshot("text");
   if (textSnap?.payload?.source === $("source-text").value) {
     state.analysis = textSnap.payload;
@@ -815,7 +714,6 @@ async function restoreSnapshots() {
   } else {
     renderTextAnalysis();
   }
-  renderPronunciation();
 }
 
 document.addEventListener("DOMContentLoaded", bind);

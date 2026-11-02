@@ -22,11 +22,6 @@ const DEFAULTS = {
   provider: PROVIDERS.gemini,
   geminiApiKey: "",
   groqApiKey: "",
-  slicePadBeforeMs: 40,
-  slicePadAfterMs: 80,
-  dialect: "en-US",
-  ttsEngine: "google",
-  ttsVoiceURI: "",
 };
 
 let cache = { ...DEFAULTS };
@@ -50,9 +45,6 @@ export function hasActiveKey() {
 export function initConfig() {
   cache = { ...DEFAULTS, ...loadSettings() };
   if (cache.provider !== PROVIDERS.groq) cache.provider = PROVIDERS.gemini;
-  cache.slicePadBeforeMs = clampPadding(cache.slicePadBeforeMs, DEFAULTS.slicePadBeforeMs);
-  cache.slicePadAfterMs = clampPadding(cache.slicePadAfterMs, DEFAULTS.slicePadAfterMs);
-  if (cache.ttsEngine !== "browser") cache.ttsEngine = "google";
   return getSettings();
 }
 
@@ -62,18 +54,8 @@ export function updateSettings(partial) {
     provider: cache.provider,
     geminiApiKey: cache.geminiApiKey,
     groqApiKey: cache.groqApiKey,
-    slicePadBeforeMs: cache.slicePadBeforeMs,
-    slicePadAfterMs: cache.slicePadAfterMs,
-    dialect: cache.dialect,
-    ttsEngine: cache.ttsEngine,
-    ttsVoiceURI: cache.ttsVoiceURI,
   });
   return getSettings();
-}
-
-function clampPadding(value, fallback) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.max(0, Math.min(200, Math.round(number))) : fallback;
 }
 
 export function wipeApiKeys() {

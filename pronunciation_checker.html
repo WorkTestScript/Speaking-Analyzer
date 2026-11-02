@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="uk"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="js/theme-init.js?v=split-1"></script>
+<title>Pronunciation Checker</title>
+<link rel="icon" href="assets/icons/mic.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/pronunciation_checker.css?v=accuracy-4-2">
+</head><body>
+
+<header>
+  <div class="logo"><svg class="checker-brand-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8 21h8"/></svg> Pronunciation Checker</div>
+  <div class="header-actions">
+    <a class="phonemes-info-btn page-nav-link" href="index.html">SpeakFlow</a>
+    <a class="phonemes-info-btn page-nav-link" href="analyzer.html">Analyzer</a>
+    <button class="phonemes-info-btn theme-toggle-btn" id="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme" aria-pressed="false"><svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.9 13A8.5 8.5 0 0 1 11 3.1 8.5 8.5 0 1 0 20.9 13Z"/></svg></button>
+    <button class="phonemes-info-btn" id="openListBtn" title="Список обраних слів" hidden>List</button>
+    <button class="phonemes-info-btn" id="openTextModal" title="Оригінальний текст">TXT</button>
+    <button class="phonemes-info-btn" id="openPhonemesModal" title="Таблиця фонем">! </button>
+    <label class="header-upload" for="f">Завантажити файли</label>
+    <input type="file" id="f" multiple accept=".json,audio/*">
+  </div>
+</header>
+
+<div class="container">
+  <div id="drop" style="text-align:center; padding:40px; border:2px dashed var(--border); border-radius:12px; margin-bottom:20px;">
+    <p style="margin:0; color:var(--mut)">Будь ласка, завантажте парі файлів <b>analysis.json</b> та аудіозапис за допомогою кнопки у хедері вище.</p>
+  </div>
+
+  <div id="view" hidden>
+    <div class="card-view">
+      <div id="info"></div>
+      <canvas id="cv"></canvas>
+      <audio id="au" controls></audio>
+    </div>
+    
+    <div class="card-view">
+      <div class="section-header">
+        <h3>Аналіз тексту</h3>
+        <button class="mode-toggle-btn" id="modeToggle">INFO</button>
+      </div>
+      <div id="words" class="text-display"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Модальне вікно для деталей слова -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <div class="modal-header">
+      <div class="title-wrap">
+        <h3 id="mWordTitle">Слово</h3>
+        <button class="fav-btn" id="favBtn" title="Додати до обраних" aria-label="Додати до обраних" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </button>
+      </div>
+      <div id="mWordScoreContainer"></div>
+    </div>
+    <div class="phoneme-list" id="mPhonemesList"></div>
+    
+    <div class="modal-footer-btns">
+      <button class="action-btn" id="btnPlayAudio">User</button>
+      <button class="action-btn" id="btnPlayTts">TTS</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальне вікно: список обраних слів -->
+<div class="modal-overlay" id="listModalOverlay">
+  <div class="modal list-modal">
+    <button class="modal-close" id="listModalClose">&times;</button>
+    <div class="list-toolbar">
+      <h3>Обрані слова</h3>
+      <div class="list-toolbar-btns">
+        <button class="icon-btn" id="favCopy" title="Копіювати список" aria-label="Копіювати список">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="icon-btn danger" id="favClear" title="Очистити список">Clear</button>
+      </div>
+    </div>
+    <div id="favListBody"></div>
+  </div>
+</div>
+
+<!-- Модальне вікно: оригінальний текст -->
+<div class="modal-overlay" id="textModalOverlay">
+  <div class="modal text-modal">
+    <button class="modal-close" id="textModalClose">&times;</button>
+    <div class="modal-header" style="justify-content:center;padding-right:0"><h3>Оригінальний текст</h3></div>
+    <div id="textModalBody" style="text-align:center;font-size:1.15rem;line-height:1.7;white-space:pre-wrap;overflow-y:auto;max-height:70vh"></div>
+  </div>
+</div>
+
+<!-- Модальне вікно: Таблиця фонем англійської мови -->
+<div class="modal-overlay" id="phonemesModalOverlay">
+  <div class="modal phonemes-modal">
+    <button class="modal-close" id="phonemesModalClose">&times;</button>
+<div class="modal-header" style="margin-bottom: 8px;">
+      <h3 style="font-size: 1.2rem;">Таблиця фонем англійської мови</h3>
+    </div>
+    <div class="phonemes-grid" id="phonemesGridContainer"></div>
+  </div>
+</div>
+
+<!-- Мале вікно: приклад фонеми у слові -->
+<div class="modal-overlay" id="phExampleOverlay">
+  <div class="modal mini-modal">
+    <button class="modal-close" id="phExampleClose">&times;</button>
+    <div class="mini-kind" id="phExKind"></div>
+    <div class="mini-symbol" id="phExSymbol"></div>
+    <div class="mini-word" id="phExWord"></div>
+    <div class="mini-note" id="phExNote"></div>
+    <div class="modal-footer-btns" style="margin-top:12px"><button class="action-btn" id="phExPlay">▶ Прослухати</button></div>
+  </div>
+</div>
+
+<script src="js/pronunciation_checker.js?v=accuracy-4-1"></script>
+</body></html>

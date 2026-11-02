@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer" />
   <title>Speaking Analyzer</title>
   <script>try { document.documentElement.dataset.theme = localStorage.getItem("speaking-analyzer-theme") === "dark" ? "dark" : "light"; } catch { document.documentElement.dataset.theme = "light"; }</script>
-  <link rel="stylesheet" href="css/style.css?v=header-height-restore-1" />
+  <link rel="stylesheet" href="css/style.css?v=header-height-1" />
   <link rel="icon" href="assets/icons/mic.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -18,7 +18,8 @@
       </div>
     </div>
     <div class="top-actions">
-      <a class="btn btn-secondary speakflow-link" href="index.html">SpeakFlow</a>
+      <a class="btn btn-secondary page-nav-link speakflow-link" href="index.html">SpeakFlow</a>
+      <a class="btn btn-secondary page-nav-link pronunciation-link" href="pronunciation_checker.html">Pronunciation</a>
       <span id="provider-badge" class="badge" data-provider="gemini">Gemini</span>
       <button type="button" id="theme-toggle" class="btn btn-secondary theme-toggle" aria-label="Switch to dark theme" title="Switch to dark theme" aria-pressed="false">
         <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
@@ -37,13 +38,19 @@
         <div class="cluster stats-inline">
           <span>Words <strong id="stat-words">0</strong></span>
           <span>Level <strong id="stat-level">—</strong></span>
+          <span id="analysis-success" class="analysis-success" role="img" aria-label="Analysis completed successfully" title="Analysis completed successfully" hidden>✓</span>
         </div>
         <div class="cluster editor-actions">
           <button type="button" id="btn-clear" class="btn btn-ghost">Clear Text</button>
           <button type="button" id="btn-analyze" class="btn btn-primary">Analyze Text</button>
         </div>
       </div>
-      <textarea id="source-text" rows="10" placeholder="Type or paste English text here…"></textarea>
+      <div class="textarea-wrap">
+        <textarea id="source-text" rows="10" placeholder="Type or paste English text here…"></textarea>
+        <button type="button" id="btn-copy-text" class="btn btn-ghost icon-only copy-text-btn" aria-label="Copy text" title="Copy text">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+        </button>
+      </div>
     </section>
 
     <section class="analysis-panel" hidden>
@@ -75,54 +82,23 @@
 
     <section class="recording-panel" aria-labelledby="audio-heading">
       <div class="card-head">
-        <h2 id="audio-heading">Audio Recording</h2>
-        <span id="rec-indicator" class="live-dot" data-on="false"></span>
+        <h2 id="audio-heading">Audio Recording<span id="rec-indicator" class="live-dot" data-on="false"></span></h2>
       </div>
       <p id="recording-unsupported" class="banner" hidden>MediaRecorder is not supported. Voice recording is unavailable in this browser.</p>
-      <canvas id="waveform" width="640" height="72" aria-label="Recording level"></canvas>
+      <div class="recording-media-slot">
+        <div id="waveform" aria-hidden="true"></div>
+        <audio id="history-audio-player" class="history-audio-player" controls hidden aria-label="Loaded recording playback"></audio>
+      </div>
       <div class="toolbar compact">
-        <button type="button" id="btn-record" class="btn btn-primary icon-only record-control" aria-label="Start recording" title="Start recording"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" /></svg></button>
-        <button type="button" id="btn-stop-rec" class="btn icon-only" aria-label="Stop recording" title="Stop recording" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1" /></svg></button>
-        <button type="button" id="btn-play" class="btn btn-ghost icon-only" aria-label="Play recording" title="Play recording" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg></button>
-        <button type="button" id="btn-pause-play" class="btn btn-ghost icon-only" aria-label="Pause playback" title="Pause playback" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z" /></svg></button>
-        <button type="button" id="btn-delete-rec" class="btn btn-ghost icon-only danger" aria-label="Delete recording" title="Delete recording" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 4h4m-7 3 1 13h8l1-13M10 10v7m4-7v7" /></svg></button>
+        <button type="button" id="btn-record" class="btn btn-primary icon-only record-control" aria-label="Start recording" title="Start recording" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" /></svg></button>
+        <button type="button" id="btn-play" class="btn btn-ghost icon-only" aria-label="Play recording" title="Play recording" data-playing="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="play-icon" d="M8 5.5v13l11-6.5z" /><rect class="stop-icon" x="6" y="6" width="12" height="12" rx="1" /></svg></button>
+        <button type="button" id="btn-delete-rec" class="btn btn-ghost icon-only" aria-label="Delete recording" title="Delete recording" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 4h4m-7 3 1 13h8l1-13M10 10v7m4-7v7" /></svg></button>
         <button type="button" id="btn-download" class="btn btn-ghost icon-only" aria-label="Download recording" title="Download recording" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 20h14" /></svg></button>
       </div>
-      <p class="rec-meta"><span class="muted">Duration</span> <strong id="rec-duration">0:00</strong></p>
       <h3>Recording history</h3>
       <div id="history-list"></div>
     </section>
 
-    <div class="grid-3">
-      <section id="pronunciation-panel" class="pronunciation-panel" aria-labelledby="pron-heading">
-        <div class="card-head">
-          <h2 id="pron-heading">Pronunciation Analysis</h2>
-          <progress id="pronunciation-progress" max="100" value="0" hidden aria-label="Model download progress"></progress>
-        </div>
-        <div class="toolbar compact">
-          <button type="button" id="btn-analyze-pronunciation" class="btn btn-primary" disabled>Analyze with ONNX</button>
-        </div>
-        <p id="pronunciation-status" class="status" aria-live="polite"></p>
-        <div id="pronunciation-results"></div>
-        <dialog id="word-panel" class="detail-panel">
-          <button type="button" id="btn-close-word" class="dialog-close" aria-label="Close dialog" title="Close">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
-          </button>
-          <h3>Word details</h3>
-          <p><strong id="word-value"></strong> <span id="word-status" class="pill"></span></p>
-          <p><span class="muted">IPA</span> <span id="word-ipa"></span></p>
-          <p id="word-uk"></p>
-          <p><span class="muted">Recognized as</span> <span id="word-recognized"></span></p>
-          <p id="word-syllables-row" hidden><span class="muted">Likely affected syllable</span> <strong id="word-syllables"></strong></p>
-          <p id="word-definition" class="muted"></p>
-          <div class="cluster word-audio-actions">
-            <button type="button" id="btn-play-ref" class="btn">TTS</button>
-            <button type="button" id="btn-play-user-word" class="btn">User</button>
-          </div>
-        </dialog>
-      </section>
-
-    </div>
   </main>
 
   <div id="toast" class="toast" hidden></div>
@@ -148,19 +124,6 @@
         Groq API Key
         <input id="setting-groq" type="password" autocomplete="off" />
       </label>
-      <label>
-        Voice engine
-        <select id="tts-engine" aria-label="Reference voice engine">
-          <option value="google">Google (American English)</option>
-          <option value="browser">Browser voice</option>
-        </select>
-      </label>
-      <label id="tts-voice-control">
-        Sample voice
-        <select id="tts-voice" aria-label="Speech synthesis voice"></select>
-      </label>
-      <label class="range-setting">Padding before word <output id="setting-pad-before-value">25 ms</output><input id="setting-pad-before" type="range" min="0" max="100" step="1" value="25" /></label>
-      <label class="range-setting">Padding after word <output id="setting-pad-after-value">0 ms</output><input id="setting-pad-after" type="range" min="0" max="100" step="1" value="0" /></label>
       <p id="test-result" class="status"></p>
       <div class="cluster">
         <button type="button" id="btn-test-connection" class="btn">Test Connection</button>
@@ -180,6 +143,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="js/app.js?v=local-phoneme-server-20261031"></script>
+  <script type="module" src="js/app.js?v=history-trash-svg-2"></script>
 </body>
 </html>

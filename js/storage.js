@@ -1,6 +1,5 @@
 const SETTINGS_KEY = "esa.settings.v1";
 const DRAFT_KEY = "esa.draft.v1";
-const PAD_VERSION = 2;
 const DB_NAME = "english-analyzer";
 const DB_VERSION = 1;
 const RECORDINGS = "recordings";
@@ -46,12 +45,6 @@ export function loadSettings() {
       provider: parsed.provider || "gemini",
       geminiApiKey: typeof parsed.geminiApiKey === "string" ? parsed.geminiApiKey : "",
       groqApiKey: typeof parsed.groqApiKey === "string" ? parsed.groqApiKey : "",
-      // Pads saved before padVersion 2 used the old 25/0 ms defaults; reset them to the new ones once.
-      slicePadBeforeMs: parsed.padVersion === PAD_VERSION && Number.isFinite(Number(parsed.slicePadBeforeMs)) ? Math.max(0, Math.min(200, Number(parsed.slicePadBeforeMs))) : 40,
-      slicePadAfterMs: parsed.padVersion === PAD_VERSION && Number.isFinite(Number(parsed.slicePadAfterMs)) ? Math.max(0, Math.min(200, Number(parsed.slicePadAfterMs))) : 80,
-      dialect: "en-US",
-      ttsEngine: parsed.ttsEngine === "browser" ? "browser" : "google",
-      ttsVoiceURI: typeof parsed.ttsVoiceURI === "string" ? parsed.ttsVoiceURI : "",
     };
   } catch {
     return {};
@@ -64,12 +57,6 @@ export function saveSettings(settings) {
     provider: settings.provider ?? current.provider ?? "gemini",
     geminiApiKey: settings.geminiApiKey ?? current.geminiApiKey ?? "",
     groqApiKey: settings.groqApiKey ?? current.groqApiKey ?? "",
-    slicePadBeforeMs: settings.slicePadBeforeMs ?? current.slicePadBeforeMs ?? 40,
-    slicePadAfterMs: settings.slicePadAfterMs ?? current.slicePadAfterMs ?? 80,
-    padVersion: PAD_VERSION,
-    dialect: "en-US",
-    ttsEngine: settings.ttsEngine ?? current.ttsEngine ?? "google",
-    ttsVoiceURI: settings.ttsVoiceURI ?? current.ttsVoiceURI ?? "",
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
 }

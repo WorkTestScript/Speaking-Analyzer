@@ -1,0 +1,150 @@
+@charset "UTF-8";
+:root{--bg:#0f172a;--fg:#f8fafc;--card:#1e293b;--card-hover:#334155;--mut:#94a3b8;--border:#334155;--accent:#3b82f6;--green:#bbf7d0;--green-border:#4ade80;--green-text:#14532d;--good:#d9f99d;--good-border:#a3e635;--good-text:#3f6212;--yellow:#fef9c3;--yellow-border:#fde047;--yellow-text:#854d0e;--red:#fee2e2;--red-border:#f87171;--red-text:#dc2626}
+body{font:16px/1.5 system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:0}
+
+/* Хедер */
+header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:1.1rem;font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+.header-actions{display:flex;align-items:center;gap:10px}
+.phonemes-info-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.9rem;transition:background 0.2s, border-color 0.2s}
+.phonemes-info-btn:hover{background:var(--card-hover);border-color:var(--accent)}
+
+.header-upload{display:inline-flex;align-items:center;background:var(--accent);color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.9rem;transition:opacity 0.2s}
+.header-upload:hover{opacity:0.9}
+
+.container{max-width:800px;margin:24px auto;padding:0 16px}
+.card-view{background:var(--card);border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid var(--border)}
+canvas{width:100%;height:110px;background:var(--bg);border-radius:8px;cursor:pointer;display:block;margin:12px 0;border:1px solid var(--border)}
+audio{width:100%;margin-top:8px}
+small{color:var(--mut)}
+
+/* Компактний та акуратний текст */
+.text-display{font-size:1.05rem;line-height:2.2;word-spacing:2px;}
+.word-token{display:inline;padding:1px 4px;border-radius:3px;cursor:pointer;margin:0 1px;font-weight:500;border-width:1px;border-style:solid;line-height:1.8;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
+
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.section-header h3{margin:0;font-size:1.1rem;color:var(--mut)}
+
+/* Кнопка-перемикач режиму */
+.mode-toggle-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;transition:background 0.2s, border-color 0.2s}
+.mode-toggle-btn:hover{background:var(--card-hover);border-color:var(--accent)}
+.mode-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* Загальні стилі модальних вікон */
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-overlay.active{opacity:1;pointer-events:auto}
+.modal{background:var(--card);border:1px solid var(--border);width:90%;max-width:480px;border-radius:16px;padding:24px;box-shadow:0 20px 25px -5px rgb(0 0 0 / 0.3);position:relative;transform:scale(0.95);transition:transform 0.2s;display:flex;flex-direction:column}
+.modal-overlay.active .modal{transform:scale(1)}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--mut);font-size:24px;cursor:pointer;padding:4px;line-height:1}
+.modal-close:hover{color:var(--fg)}
+
+/* Хедер модалки слова */
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-right:24px}
+.modal-header h3{margin:0;font-size:1.35rem}
+.modal-score-badge{padding:4px 10px;border-radius:6px;font-size:1.1rem;font-weight:700;border:1px solid}
+
+/* Кнопки внизу модального вікна */
+.modal-footer-btns{display:flex;gap:12px;justify-content:center;margin-top:20px}
+.action-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:8px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.95rem;transition:background 0.2s, border-color 0.2s}
+.action-btn:hover{background:var(--card-hover);border-color:var(--accent)}
+
+.phoneme-list{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;padding-right:4px}
+.phoneme-item{background:var(--bg);padding:10px 14px;border-radius:8px;border:1px solid var(--border);font-size:1.05rem;font-weight:600;line-height:1.5}
+.badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:0.9rem;font-weight:700;margin-left:6px}
+
+/* Збільшене модальне вікно для фонем (без скролу) */
+.phonemes-modal {
+  max-width: 900px !important;
+  width: 94% !important;
+  padding: 20px 24px !important;
+}
+
+/* Сітка фонем без скролу */
+.phonemes-grid{
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .phonemes-grid { grid-template-columns: repeat(6, 1fr); }
+}
+
+@media (max-width: 500px) {
+  .phonemes-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.phoneme-grid-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 4px;text-align:center;cursor:pointer;transition:background 0.2s, border-color 0.2s}
+.phoneme-grid-item:hover{background:var(--card-hover);border-color:var(--accent)}
+.grid-symbol{font-size:1.1rem;font-weight:700;color:var(--accent);display:block}
+.grid-word{font-size:0.75rem;color:var(--mut);display:block;margin-top:2px}
+.highlight-target{color:var(--accent);font-weight:700;text-decoration:underline;}
+
+
+/* Голосовий движок */
+
+/* Клікабельні фонеми */
+.ph-chip{display:inline-block;background:var(--card);border:1px solid var(--accent);color:var(--fg);border-radius:6px;padding:1px 8px;margin:0 2px;font:inherit;font-weight:700;cursor:pointer;transition:background .2s}
+.ph-chip:hover{background:var(--accent);color:#fff}
+.ph-chip.heard{border-color:var(--red-border);color:var(--red-border)}
+.ph-chip.heard:hover{background:var(--red-border);color:#fff}
+.ph-chip.alt{font-weight:500;font-size:.9rem;padding:0 6px;border-color:var(--border);color:var(--mut)}
+.ph-chip.alt:hover{border-color:var(--accent);color:#fff}
+.ph-meta{font-size:.9rem;font-weight:500;color:var(--mut)}
+
+/* Мале вікно прикладу фонеми */
+#phExampleOverlay{z-index:1200}
+.mini-modal{max-width:340px;text-align:center;align-items:center}
+.mini-kind{font-size:.85rem;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.mini-symbol{font-size:2.6rem;font-weight:700;color:var(--accent);line-height:1.2;margin:4px 0}
+.mini-word{font-size:2.2rem;font-weight:600;letter-spacing:.02em;margin:8px 0 4px}
+.mini-note{font-size:.85rem;color:var(--mut);min-height:1.2em}
+.mini-modal .highlight-target{background:rgba(59,130,246,.25);border-radius:4px;padding:0 2px;text-decoration:none}
+
+/* Прокрутка, якщо символів більше, ніж влізає */
+.phonemes-modal{max-height:90vh;overflow-y:auto}
+.ph-group-title{margin:18px 0 0;font-size:.95rem;color:var(--mut);border-bottom:1px solid var(--border);padding-bottom:4px}
+.ph-group-title small{font-weight:400}
+.phoneme-grid-item.no-example{opacity:.7;cursor:default}
+
+
+/* Гнучке вікно слова: росте під вміст, скрол лише коли не вміщається в екран */
+#modalContent{width:max-content;min-width:min(480px,94vw);max-width:96vw;max-height:94vh;box-sizing:border-box}
+#modalContent .phoneme-list{max-height:none;flex:1 1 auto;min-height:0;overflow:auto}
+#modalContent .phoneme-item{white-space:nowrap}
+#modalContent .modal-header,#modalContent .modal-footer-btns{flex:0 0 auto}
+@media (max-width:500px){#modalContent{padding:16px}}
+/* Вікно з оригінальним текстом: прозорий фон, видима сторінка, рамка замість тіні */
+#textModalOverlay{background:transparent;backdrop-filter:none}
+.text-modal{max-width:640px;box-shadow:none;border:2px solid var(--accent)}
+input[type="file"]{display:none}
+
+/* Обрані слова */
+.title-wrap{display:flex;align-items:center;gap:8px;min-width:0}
+.fav-btn{background:none;border:none;padding:2px;cursor:pointer;color:var(--mut);display:inline-flex;align-items:center;line-height:1;transition:color .2s, transform .15s}
+.fav-btn:hover{color:#facc15;transform:scale(1.15)}
+.fav-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.fav-btn.active{color:#facc15}
+.fav-btn.active svg{fill:currentColor}
+#openListBtn[hidden]{display:none}
+.list-modal{max-width:420px}
+.list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-right:28px;margin-bottom:12px}
+.list-toolbar h3{margin:0;font-size:1.2rem}
+.list-toolbar-btns{display:flex;gap:8px}
+.icon-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:6px 10px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;transition:background .2s, border-color .2s}
+.icon-btn:hover{background:var(--card-hover);border-color:var(--accent)}
+.icon-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.icon-btn.copied{border-color:var(--green-border);color:var(--green-border)}
+.icon-btn.danger:hover{border-color:var(--red-border);color:var(--red-border)}
+#favListBody{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto}
+.fav-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;transition:color .15s,border-color .15s}
+.fav-item:hover,.fav-item:focus-visible{color:color-mix(in srgb,var(--fg) 82%,var(--accent) 18%)}
+:root[data-theme="light"]{--bg:#f5efe6;--fg:#3a322a;--card:#fffaf3;--card-hover:#f1e8dc;--mut:#7b6d61;--border:#e7dbcd;--accent:#a7643f;--green:#d3e5cf;--green-border:#8fbb87;--green-text:#355a2f;--good:#e4ecc0;--good-border:#b5c780;--good-text:#4d5b22;--yellow:#f5e3bd;--yellow-border:#ddc07d;--yellow-text:#7a5c28;--red:#f6ded7;--red-border:#d99b8f;--red-text:#8c443c}
+.checker-brand-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:6px}
+.theme-toggle-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+:root[data-theme="dark"] .theme-icon-sun,:root[data-theme="light"] .theme-icon-moon{display:none}
+.page-nav-link{text-decoration:none;white-space:nowrap}
+:root[data-theme="light"] canvas{background:#334155}
+@media(max-width:760px){.header-actions{flex-wrap:wrap;justify-content:flex-end;gap:6px}.page-nav-link{padding:6px 8px;font-size:.8rem}.header-upload{padding:6px 9px;font-size:.8rem}}
