@@ -55,13 +55,16 @@
 .record-answer-button { flex:0 0 auto; }
 #play-answer-recording svg path { fill:currentColor;stroke:none; }
 .answer-editor { position:relative; }
-#answer-highlight { position:absolute;inset:1px;overflow:hidden;padding:14px;white-space:pre-wrap;overflow-wrap:break-word;pointer-events:none;color:var(--text);border-radius:11px;line-height:1.65;font-size:1rem;font-family:inherit; }
-#answer-text { position:relative;min-height:105px;resize:vertical;background:transparent;line-height:1.65;font-size:1rem;color:transparent;caret-color:var(--text); }
+#answer-highlight { position:absolute;inset:1px;overflow:hidden;padding:10px 14px;white-space:pre-wrap;overflow-wrap:break-word;pointer-events:none;color:var(--text);border-radius:11px;line-height:1.65;font-size:1rem;font-family:inherit; }
+#answer-text { position:relative;height:50px;min-height:50px;padding:10px 14px;resize:vertical;background:transparent;line-height:1.65;font-size:1rem;color:transparent;caret-color:var(--text); }
 #answer-text::placeholder { color:var(--muted); }
 #answer-text:focus { background:transparent; }
 #answer-text:disabled { opacity:.62; }
-.word-feedback { min-height:0;margin-top:6px;font-size:.8rem; }
-.word-feedback:not(:empty) { min-height:1.25em; }
+.recording-words { display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:9px; }
+.recording-words[hidden] { display:none; }
+.recording-words-list { display:flex;flex-wrap:wrap;gap:6px; }
+.recording-word { border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--text);padding:3px 8px;font-size:.92rem;line-height:1.35;cursor:pointer;transition:background .15s,border-color .15s,color .15s; }
+.recording-word:hover,.recording-word:focus-visible,.recording-word.is-playing { background:var(--accent-soft);border-color:var(--accent);color:var(--accent);outline:none; }
 .word-error { text-decoration:underline wavy var(--danger);text-decoration-thickness:1.5px;text-underline-offset:3px; }
 .practice-actions { display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:13px; }
 .practice-actions svg { width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }

@@ -1,5 +1,5 @@
 import { initConfig, getSettings, updateSettings, MODELS } from "./config.js";
-import { transcribeAudio } from "./api/provider.js";
+import { transcribeAudioWithWordTimes } from "./api/provider.js?v=word-timestamps-1";
 import { speakGoogleAmerican, stopGoogleSpeech, setGoogleSpeechRate } from "./google-tts.js?v=tts-rate-fix-1";
 
 const $ = (id) => document.getElementById(id);
@@ -20,6 +20,9 @@ let advanceTimer = null;
 let autoAdvance = true;
 let audioUrl = null;
 let answerPlayback = null;
+let answerWords = [];
+let wordPlaybackTimer = null;
+let wordPlaybackButton = null;
 let silenceContext = null;
 let silenceAnalyser = null;
 let silenceFrame = 0;
@@ -35,6 +38,52 @@ function setAnswerPlaybackIcon(playing) {
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
   button.setAttribute("aria-label", playing ? "Stop recorded answer" : "Play recorded answer");
   button.title = playing ? "Stop recorded answer" : "Play recorded answer";
+}
+function stopRecordingWordPlayback() {
+  if (!wordPlaybackTimer && !wordPlaybackButton) return;
+  clearTimeout(wordPlaybackTimer); wordPlaybackTimer = null;
+  if (wordPlaybackButton) { wordPlaybackButton.classList.remove("is-playing"); wordPlaybackButton = null; }
+  if (answerPlayback) { answerPlayback.pause(); answerPlayback.currentTime = 0; }
+  setAnswerPlaybackIcon(false);
+}
+function clearRecordingWords() {
+  stopRecordingWordPlayback();
+  answerWords = [];
+  const list = $("recording-words-list");
+  if (list) list.replaceChildren();
+  const row = $("recording-words");
+  if (row) row.hidden = true;
+}
+function renderRecordingWords() {
+  const row = $("recording-words"); const list = $("recording-words-list");
+  list.replaceChildren();
+  row.hidden = !answerWords.length;
+  answerWords.forEach((item, wordIndex) => {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "recording-word"; button.textContent = item.word;
+    button.title = "Play this word from your recording";
+    button.setAttribute("aria-label", `Play "${item.word}" from your recording`);
+    button.addEventListener("click", () => playRecordingWord(wordIndex, button));
+    list.append(button);
+  });
+}
+function playRecordingWord(wordIndex, button) {
+  const item = answerWords[wordIndex];
+  if (!item || !answerPlayback) return;
+  stopRecordingWordPlayback();
+  const start = Math.max(0, item.start - 0.04);
+  const end = Math.max(start + 0.1, item.end + 0.04);
+  const play = () => {
+    try {
+      answerPlayback.currentTime = start;
+      wordPlaybackButton = button; button.classList.add("is-playing");
+      answerPlayback.play().then(() => setAnswerPlaybackIcon(true)).catch(() => stopRecordingWordPlayback());
+      const rate = answerPlayback.playbackRate || 1;
+      wordPlaybackTimer = setTimeout(stopRecordingWordPlayback, Math.max(150, ((end - start) * 1000) / rate + 40));
+    } catch { stopRecordingWordPlayback(); }
+  };
+  if (answerPlayback.readyState >= 1) play();
+  else answerPlayback.addEventListener("loadedmetadata", play, { once: true });
 }
 
 function stopSilenceMonitor() {
@@ -111,6 +160,7 @@ function restoreProgress() {
   } catch { index = 0; }
 }
 function advancePhrase() {
+  clearRecordingWords();
   if (!phrases.length) return;
   index = index + 1 < phrases.length ? index + 1 : 0;
   try { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ signature: listSignature(), index })); } catch { /* keep the current session usable if storage is unavailable */ }
@@ -166,7 +216,7 @@ function renderPhrase() {
   advancePending = false;
   updateAdvanceControls();
   $("answer-correct").hidden = true;
-  cleanAudio(); stopGoogleSpeech(); ttsBusy = false;
+  cleanAudio(); clearRecordingWords(); stopGoogleSpeech(); ttsBusy = false;
   const phrase = phrases[index];
   renderPhraseWords(phrase?.en || "Load a phrase list to get started.");
   $("phrase-text").classList.add("is-hidden"); $("reveal-text").setAttribute("aria-label", "Show phrase"); $("reveal-text").title = "Show phrase";
@@ -177,7 +227,7 @@ function renderPhrase() {
   if ($("example-modal").open) $("example-modal").close();
   $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-text").disabled = !phrase; $("record-answer").disabled = !phrase || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("skip-phrase").disabled = !phrase;
   $("phrase-play").disabled = !phrase; setPhrasePlayState(false);
-  $("word-feedback").replaceChildren(); announce(""); renderList();
+  announce(""); renderList();
 }
 function renderPhraseWords(text) {
   const target = $("phrase-text"); target.replaceChildren();
@@ -204,13 +254,11 @@ async function playCurrentPhrase() {
 }
 function compare() {
   const expected = normalize(phrases[index]?.en || ""); const actual = normalize($("answer-text").value);
-  $("word-feedback").replaceChildren();
   renderHighlights(expected);
   if (!expected.length || !actual.length) { announce(""); return false; }
-  const frag = document.createDocumentFragment(); let mistakes = 0;
-  actual.forEach((word, i) => { if (i) frag.append(document.createTextNode(" ")); const span = document.createElement("span"); span.textContent = word; if (word !== expected[i]) { span.className = "word-error"; mistakes++; } frag.append(span); });
+  let mistakes = 0;
+  actual.forEach((word, i) => { if (word !== expected[i]) mistakes++; });
   if (actual.length !== expected.length) mistakes += Math.abs(expected.length - actual.length);
-  $("word-feedback").append(frag);
   const correct = mistakes === 0 && actual.length === expected.length;
   if (correct && !advancePending) {
     advancePending = true;
@@ -252,6 +300,7 @@ async function importFile(file) {
   finally { $("json-file").value = ""; }
 }
 async function recordAnswer(automatic = false) {
+  clearRecordingWords();
   if (recording) {
     recording = false; stopSilenceMonitor(); $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Transcribing answer"); $("record-answer").title = "Transcribing answer"; $("record-answer").disabled = true;
     try {
@@ -262,10 +311,12 @@ async function recordAnswer(automatic = false) {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       audioUrl = URL.createObjectURL(blob); answerPlayback = new Audio(audioUrl); $("play-answer-recording").disabled = false;
       answerPlayback.onended = () => setAnswerPlaybackIcon(false);
-      const result = await transcribeAudio(blob, blob.type || "audio/webm", { language: "en-US" });
+      const result = await transcribeAudioWithWordTimes(blob, blob.type || "audio/webm", { language: "en-US" });
       if (!result.text?.trim() || /^\s*\[?\s*blank[\s_-]*audio\s*\]?\s*$/i.test(result.text)) throw new Error("No speech detected. Start recording and speak clearly, or type your answer.");
+      const timedWords = Array.isArray(result.words) ? result.words : [];
+      answerWords = timedWords.filter((item) => item && typeof item.word === "string" && /[\p{L}\p{N}]/u.test(item.word) && Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).map((item) => ({ word: item.word.trim(), start: item.start, end: item.end }));
       lastRecognitionModel = result.model || ""; updateRecognitionModel();
-      if (!typingIntent) { $("answer-text").value = result.text.trim(); compare(); }
+      if (!typingIntent) { $("answer-text").value = result.text.trim(); compare(); renderRecordingWords(); }
     } catch (error) { toast(error.message || String(error)); }
     finally { mediaRecorder = null; audioChunks = []; $("record-answer").disabled = !phrases[index] || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; }
     return;
@@ -273,7 +324,7 @@ async function recordAnswer(automatic = false) {
   if (automatic && typingIntent) return;
   try {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("Microphone recording is not supported in this browser.");
-    $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("word-feedback").replaceChildren(); $("answer-correct").hidden = true; advancePending = false; clearTimeout(advanceTimer); advanceTimer = null; updateAdvanceControls();
+    $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-correct").hidden = true; advancePending = false; clearTimeout(advanceTimer); advanceTimer = null; updateAdvanceControls(); clearRecordingWords();
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) { silenceContext = new AudioContextClass(); if (silenceContext.state !== "running") await silenceContext.resume(); }
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -306,7 +357,7 @@ function bind() {
     try { await speakGoogleAmerican(word, { rate: Number($("tts-rate").value) }); } catch (error) { toast(error.message || String(error)); }
   });
   $("answer-text").addEventListener("focus", stopRecordingForTyping);
-  $("answer-text").addEventListener("input", () => { if ($("answer-text").value.trim()) compare(); else { $("word-feedback").replaceChildren(); renderHighlights(); announce(""); } });
+  $("answer-text").addEventListener("input", () => { clearRecordingWords(); if ($("answer-text").value.trim()) compare(); else { renderHighlights(); announce(""); } });
   $("answer-text").addEventListener("scroll", () => { $("answer-highlight").scrollTop = $("answer-text").scrollTop; });
   $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; void recordAnswer(); });
   $("manual-next").addEventListener("click", () => { if (!autoAdvance && advancePending) advancePhrase(); });
@@ -321,6 +372,7 @@ function bind() {
   });
   $("play-answer-recording").addEventListener("click", async () => {
     if (!answerPlayback) return;
+    stopRecordingWordPlayback();
     if (!answerPlayback.paused) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); return; }
     try { await answerPlayback.play(); setAnswerPlaybackIcon(true); } catch (error) { toast(error.message || "Could not play this recording."); }
   });

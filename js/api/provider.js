@@ -43,7 +43,10 @@ export async function transcribeAudioWithWordTimes(blob, mimeType, options) {
   if (result.timestampsAvailable && result.words?.length) return result;
   const settings = getSettings();
   if (getProviderId() !== PROVIDERS.groq && settings.groqApiKey) {
-    return groqTranscribe(settings.groqApiKey, blob, mimeType, options);
+    try {
+      const timed = await groqTranscribe(settings.groqApiKey, blob, mimeType, options);
+      if (timed.timestampsAvailable && timed.words?.length) return timed;
+    } catch { /* keep the original transcript if the timestamp fallback fails */ }
   }
   return result;
 }
