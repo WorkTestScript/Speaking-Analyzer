@@ -170,7 +170,11 @@ function renderPhrase() {
   const phrase = phrases[index];
   renderPhraseWords(phrase?.en || "Load a phrase list to get started.");
   $("phrase-text").classList.add("is-hidden"); $("reveal-text").setAttribute("aria-label", "Show phrase"); $("reveal-text").title = "Show phrase";
-  $("phrase-translation").textContent = phrase?.ua || ""; $("phrase-translation").hidden = !phrase?.ua;
+  const translation = phrase?.ua || "";
+  const example = phrase?.example || "";
+  $("phrase-translation-text").textContent = translation; $("phrase-translation").hidden = !translation;
+  $("phrase-example").hidden = !example; $("example-content").textContent = example;
+  if ($("example-modal").open) $("example-modal").close();
   $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-text").disabled = !phrase; $("record-answer").disabled = !phrase || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("skip-phrase").disabled = !phrase;
   $("phrase-play").disabled = !phrase; setPhrasePlayState(false);
   $("word-feedback").replaceChildren(); announce(""); renderList();
@@ -235,8 +239,8 @@ function renderHighlights(expected = normalize(phrases[index]?.en || "")) {
 function nextPhrase() { advancePhrase(); }
 function validateList(data) {
   if (!Array.isArray(data) || !data.length) throw new Error("The JSON file must contain a non-empty array of phrase objects.");
-  if (data.some((item) => !item || typeof item !== "object" || Array.isArray(item) || typeof item.en !== "string" || !item.en.trim() || ("ua" in item && typeof item.ua !== "string") || ("example" in item && typeof item.example !== "string"))) throw new Error('Every item needs a non-empty "en" string. Optional "ua" and "example" values must be strings.');
-  return data.map(({ en, ua, example }) => ({ en: en.trim(), ...(typeof ua === "string" && ua.trim() ? { ua: ua.trim() } : {}), ...(typeof example === "string" && example.trim() ? { example: example.trim() } : {}) }));
+  if (data.some((item) => !item || typeof item !== "object" || Array.isArray(item) || typeof item.en !== "string" || !item.en.trim() || typeof item.ua !== "string" || !item.ua.trim() || ("example" in item && typeof item.example !== "string"))) throw new Error('Every item needs non-empty "en" and "ua" strings. The optional "example" value must be a string.');
+  return data.map(({ en, ua, example }) => ({ en: en.trim(), ua: ua.trim(), ...(typeof example === "string" && example.trim() ? { example: example.trim() } : {}) }));
 }
 async function importFile(file) {
   try {
@@ -292,6 +296,9 @@ function bind() {
   $("theme-toggle").addEventListener("click", () => { const dark = document.documentElement.dataset.theme !== "dark"; const theme = dark ? "dark" : "light"; document.documentElement.dataset.theme = theme; try { localStorage.setItem(THEME_KEY, theme); } catch {} $("theme-toggle").setAttribute("aria-pressed", String(dark)); $("theme-toggle").title = dark ? "Switch to light theme" : "Switch to dark theme"; });
   $("open-list").addEventListener("click", () => $("list-modal").showModal()); $("list-modal").addEventListener("click", (event) => { if (event.target === $("list-modal")) $("list-modal").close(); }); $("open-json").addEventListener("click", () => $("json-file").click()); $("json-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
   $("reveal-text").addEventListener("click", () => { const hidden = $("phrase-text").classList.toggle("is-hidden"); $("reveal-text").setAttribute("aria-label", hidden ? "Show phrase" : "Hide phrase"); $("reveal-text").title = hidden ? "Show phrase" : "Hide phrase"; });
+  $("phrase-example").addEventListener("click", () => { const example = phrases[index]?.example; if (!example) return; $("example-content").textContent = example; $("example-modal").showModal(); });
+  $("close-example").addEventListener("click", () => $("example-modal").close());
+  $("example-modal").addEventListener("click", (event) => { if (event.target === $("example-modal")) $("example-modal").close(); });
   $("phrase-play").addEventListener("click", () => { void playCurrentPhrase(); });
   $("phrase-text").addEventListener("click", async (event) => {
     const word = event.target.closest(".phrase-word")?.dataset.word; if (!word) return;

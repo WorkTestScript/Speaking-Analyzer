@@ -1,36 +1,36 @@
 :root {
-  --bg: #f5efe6;
-  --surface: #fffaf3;
-  --text: #3a322a;
-  --muted: #7b6d61;
-  --line: #e7dbcd;
-  --accent: #a7643f;
-  --accent-soft: #f4e4d8;
-  --primary-bg: #eed7c5;
-  --primary-text: #4b2f20;
-  --primary-hover-bg: #e5c6ad;
-  --button-border: #dcc0aa;
-  --danger: #a5524b;
-  --warn: #8a6a2f;
-  --ok: #56704f;
-  --yellow: #f5e3bd;
-  --red: #f6ded7;
-  --green: #e0e9d7;
-  --subtle: #f1e8dc;
-  --field: #fffdf8;
-  --button-bg: #eed7c5;
-  --button-hover: #e5c6ad;
-  --canvas-bg: #eee3d5;
-  --canvas-line: #d9c8b6;
-  --accent-hover: #e5c6ad;
-  --status-busy: #8f5232;
-  --status-ok-bg: #e0e9d7;
-  --status-review-bg: #f5e3bd;
-  --status-error-bg: #f6ded7;
-  --status-no-issue-text: #4a6343;
-  --status-review-text: #7a5c28;
-  --status-error-text: #8c443c;
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  --bg: #f3f6fb;
+  --surface: #ffffff;
+  --text: #1e293b;
+  --muted: #64748b;
+  --line: #dbe4ef;
+  --accent: #1d4ed8;
+  --accent-soft: #e3edff;
+  --primary-bg: #dbeafe;
+  --primary-text: #1e3a8a;
+  --primary-hover-bg: #bfdbfe;
+  --button-border: #bfdbfe;
+  --danger: #dc2626;
+  --warn: #b45309;
+  --ok: #15803d;
+  --yellow: #fef3c7;
+  --red: #fee2e2;
+  --green: #d1fae5;
+  --subtle: #edf3fa;
+  --field: #ffffff;
+  --button-bg: #e8f0fb;
+  --button-hover: #dbe7f7;
+  --canvas-bg: #e6eef9;
+  --canvas-line: #c9d8ea;
+  --accent-hover: #dbeafe;
+  --status-busy: #1e40af;
+  --status-ok-bg: #d1fae5;
+  --status-review-bg: #fef3c7;
+  --status-error-bg: #fee2e2;
+  --status-no-issue-text: #065f46;
+  --status-review-text: #92400e;
+  --status-error-text: #b91c1c;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   --radius: 16px;
   font-family: "Segoe UI", Inter, system-ui, sans-serif;
 }
@@ -346,7 +346,7 @@ dialog {
   position: relative;
   color: var(--text);
   background: var(--surface);
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: 16px;
   padding: 0;
   width: min(520px, 92vw);
@@ -360,9 +360,9 @@ dialog[open] {
   max-height: calc(100dvh - 32px);
   overflow: auto;
 }
-dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
+dialog::backdrop { background: transparent; }
 .settings-form { display: grid; gap: 12px; padding: 20px; }
-.message-dialog[open] { padding: 24px; color: var(--text); background: var(--surface); border: 0; border-radius: 16px; }
+.message-dialog[open] { padding: 24px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
 .message-dialog h2 { margin: 0 40px 12px 0; font-size: 1.15rem; }
 .message-dialog p { margin: 0; line-height: 1.5; white-space: pre-wrap; }
 .message-actions { justify-content: flex-end; margin-top: 20px; }
@@ -391,9 +391,9 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
 #btn-record.record-control[aria-pressed="true"] { color: #ef4444; }
 #btn-record.record-control:hover:not(:disabled) { color: #fff; }
 #btn-record.record-control[aria-pressed="true"]:hover:not(:disabled) { color: #ef4444; }
-.issue-dialog[open] { width: min(600px, 92vw); max-height: 86vh; overflow: auto; padding: 24px; color: var(--text); background: var(--surface); border: 0; border-radius: 16px; }
+.issue-dialog[open] { width: min(600px, 92vw); max-height: 86vh; overflow: auto; padding: 24px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
 .issue-dialog h3 { margin: 0 0 18px; font-size: 1.15rem; }
-.issue-dialog::backdrop { background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); }
+.issue-dialog::backdrop { background: transparent; backdrop-filter: none; }
 .issue-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .issue-detail-grid > div { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--subtle); }
 .issue-detail-grid strong { font-size: 1rem; overflow-wrap: anywhere; }

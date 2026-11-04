@@ -31,7 +31,7 @@ small{color:var(--mut)}
 .mode-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 /* Загальні стилі модальних вікон */
-.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;pointer-events:none;transition:opacity 0.2s}
 .modal-overlay.active{opacity:1;pointer-events:auto}
 .modal{background:var(--card);border:1px solid var(--border);width:90%;max-width:480px;border-radius:16px;padding:24px;box-shadow:0 20px 25px -5px rgb(0 0 0 / 0.3);position:relative;transform:scale(0.95);transition:transform 0.2s;display:flex;flex-direction:column}
 .modal-overlay.active .modal{transform:scale(1)}
@@ -140,7 +140,7 @@ input[type="file"]{display:none}
 #favListBody{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto}
 .fav-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;transition:color .15s,border-color .15s}
 .fav-item:hover,.fav-item:focus-visible{color:color-mix(in srgb,var(--fg) 82%,var(--accent) 18%)}
-:root[data-theme="light"]{--bg:#f5efe6;--fg:#3a322a;--card:#fffaf3;--card-hover:#f1e8dc;--mut:#7b6d61;--border:#e7dbcd;--accent:#a7643f;--green:#d3e5cf;--green-border:#8fbb87;--green-text:#355a2f;--good:#e4ecc0;--good-border:#b5c780;--good-text:#4d5b22;--yellow:#f5e3bd;--yellow-border:#ddc07d;--yellow-text:#7a5c28;--red:#f6ded7;--red-border:#d99b8f;--red-text:#8c443c}
+:root[data-theme="light"]{--bg:#f3f6fb;--fg:#1e293b;--card:#ffffff;--card-hover:#edf3fa;--mut:#64748b;--border:#dbe4ef;--accent:#1d4ed8;--green:#d1fae5;--green-border:#6ee7b7;--green-text:#065f46;--good:#e9f5c9;--good-border:#b6d97a;--good-text:#4d641f;--yellow:#fef3c7;--yellow-border:#e6c56a;--yellow-text:#7a5416;--red:#fee2e2;--red-border:#e79a9a;--red-text:#8a2f2f}
 .checker-brand-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:6px}
 .theme-toggle-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

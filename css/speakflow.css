@@ -1,4 +1,4 @@
-:root { --sf-lilac:#f6e7da; --sf-blue:#efe1d2; --sf-ink:#4a2f20; }
+:root { --sf-lilac:#edf4ff; --sf-blue:#dbe8f7; --sf-ink:#1e293b; }
 :root[data-theme="dark"] { --sf-lilac:#334155; --sf-blue:#1e293b; --sf-ink:#f8fafc; }
 .sf-brand { text-decoration:none; color:inherit; gap:10px; }
 .sf-brand h1 { font-size:1.18rem; letter-spacing:-.025em; }
@@ -21,7 +21,13 @@
 .phrase-text.is-hidden { color:transparent;background:var(--surface);border-radius:8px;user-select:none; }
 .icon-btn { display:inline-grid;place-items:center;width:34px;height:34px;padding:7px;border-radius:10px; }
 .icon-btn svg { width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round; }
-.phrase-translation { color:var(--muted);font-size:.9rem;margin:-4px 0 13px;line-height:1.5; }
+.phrase-translation { display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--sf-ink);font-size:1rem;margin:-4px 0 13px;line-height:1.5; }
+.phrase-translation[hidden] { display:none; }
+.phrase-translation-text { flex:1 1 auto;min-width:0; }
+#phrase-example { flex:0 0 auto; }
+#phrase-example[hidden] { display:none; }
+#example-modal { border:1px solid var(--line); }
+#example-modal::backdrop { background:transparent; }
 .phrase-audio { display:flex;align-items:center;gap:8px;border-top:1px solid color-mix(in srgb,var(--line) 68%,transparent);padding-top:13px; }
 .rate-control { order:0;margin-left:0;margin-right:auto; }
 #progress-badge { order:1;margin-left:0;margin-right:0;position:static; }
@@ -68,7 +74,7 @@
 .sf-library .card-head h2 { margin:0 0 5px;font-size:1rem; }
 .sf-library .card-head p { margin:0;font-size:.82rem; }
 .list-modal { position:fixed;inset:0;margin:auto;width:min(720px,calc(100vw - 28px));max-height:90vh;padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--text);box-shadow:0 20px 70px #0004;overflow:auto; }
-.list-modal::backdrop { background:#17203399;backdrop-filter:blur(3px); }
+.list-modal::backdrop { background:transparent;backdrop-filter:none; }
 .list-modal .sf-library { padding:0;border:0;border-radius:0;box-shadow:none; }
 .list-modal .card-head { gap:18px; }
 .list-modal .list-preview { max-height:none;overflow:visible; }
