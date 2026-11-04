@@ -204,12 +204,23 @@ function renderList() {
   if (!phrases.length) { list.innerHTML = '<div class="empty-state">Your validated phrase list will be saved in this browser.</div>'; $("phrase-count").textContent = "0 phrases"; }
   else {
     phrases.forEach((phrase, phraseIndex) => {
-      const row = document.createElement("div"); row.className = "phrase-row"; row.dataset.current = String(phraseIndex === index);
+      const row = document.createElement("button"); row.type = "button"; row.className = "phrase-row"; row.dataset.current = String(phraseIndex === index);
       row.innerHTML = `<span class="row-index">${phraseIndex + 1}</span><strong></strong>`; row.querySelector("strong").textContent = phrase.en; list.append(row);
+      row.setAttribute("aria-label", `Show details for "${phrase.en}"`);
+      row.addEventListener("click", () => openPhraseDetail(phrase));
     });
     $("phrase-count").textContent = `${phrases.length} phrase${phrases.length === 1 ? "" : "s"}`;
   }
   $("progress-badge").textContent = phrases.length ? `${Math.min(index + 1, phrases.length)} / ${phrases.length}` : "No phrase list";
+}
+function openPhraseDetail(phrase) {
+  if (!phrase) return;
+  $("phrase-detail-title").textContent = phrase.en || "";
+  const ua = phrase.ua || ""; const example = phrase.example || "";
+  $("phrase-detail-ua").textContent = ua; $("phrase-detail-ua").hidden = !ua;
+  $("phrase-detail-example").textContent = example; $("phrase-detail-example").hidden = !example;
+  $("phrase-detail-empty").hidden = Boolean(ua || example);
+  $("phrase-detail-modal").showModal();
 }
 function renderPhrase() {
   clearTimeout(advanceTimer); advanceTimer = null;
@@ -350,6 +361,8 @@ function bind() {
   $("phrase-example").addEventListener("click", () => { const example = phrases[index]?.example; if (!example) return; $("example-content").textContent = example; $("example-modal").showModal(); });
   $("close-example").addEventListener("click", () => $("example-modal").close());
   $("example-modal").addEventListener("click", (event) => { if (event.target === $("example-modal")) $("example-modal").close(); });
+  $("close-phrase-detail").addEventListener("click", () => $("phrase-detail-modal").close());
+  $("phrase-detail-modal").addEventListener("click", (event) => { if (event.target === $("phrase-detail-modal")) $("phrase-detail-modal").close(); });
   $("phrase-play").addEventListener("click", () => { void playCurrentPhrase(); });
   $("phrase-text").addEventListener("click", async (event) => {
     const word = event.target.closest(".phrase-word")?.dataset.word; if (!word) return;
