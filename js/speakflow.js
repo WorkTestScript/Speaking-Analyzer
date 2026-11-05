@@ -24,7 +24,7 @@ let answerPlayback = null;
 let answerWords = [];
 let wordPlaybackTimer = null;
 let wordPlaybackButton = null;
-let replayBeforeAdvance = false;
+let replayRecording = false;
 let favorites = [];
 let silenceContext = null;
 let silenceAnalyser = null;
@@ -43,11 +43,11 @@ function setAnswerPlaybackIcon(playing) {
   button.title = playing ? "Stop recorded answer" : "Play recorded answer";
 }
 function finishAutoReplay() {
-  const shouldAdvance = replayBeforeAdvance && autoAdvance && advancePending;
-  replayBeforeAdvance = false;
+  const shouldAdvance = replayRecording && autoAdvance && advancePending;
+  replayRecording = false;
   if (shouldAdvance) advancePhrase();
 }
-function replayAnswerForAutoNext() {
+function replayAnswerRecording() {
   if (!answerPlayback) { finishAutoReplay(); return; }
   stopRecordingWordPlayback();
   answerPlayback.onended = () => { setAnswerPlaybackIcon(false); finishAutoReplay(); };
@@ -86,7 +86,7 @@ function playRecordingWord(wordIndex, button) {
   const item = answerWords[wordIndex];
   if (!item || !answerPlayback) return;
   stopRecordingWordPlayback();
-  replayBeforeAdvance = false;
+  replayRecording = false;
   const start = Math.max(0, item.start - 0.04);
   const end = Math.max(start + 0.1, item.end + 0.04);
   const play = () => {
@@ -264,7 +264,7 @@ function scheduleAutomaticAdvance(phraseIndex) {
     if (autoAdvance && advancePending && index === phraseIndex) advancePhrase();
   }, 1000);
 }
-function cleanAudio() { replayBeforeAdvance = false; stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
+function cleanAudio() { replayRecording = false; stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
 function stopRecordingForTyping() {
   typingIntent = true;
   if (!recording) {
@@ -364,7 +364,7 @@ function compare() {
     $("answer-text").disabled = true;
     updateAdvanceControls();
     if (autoAdvance) {
-      if (replayBeforeAdvance) announce("✓ Correct! Replaying your recording…");
+      if (replayRecording) announce("✓ Correct! Replaying your recording…");
       else { announce("✓ Correct! Moving to the next phrase…"); scheduleAutomaticAdvance(completedIndex); }
     }
     else { announce("✓ Correct! Select Next phrase when you are ready."); $("answer-status").dataset.kind = "ok"; }
@@ -400,7 +400,7 @@ async function importFile(file) {
   finally { $("json-file").value = ""; }
 }
 async function recordAnswer(automatic = false) {
-  clearRecordingWords(); replayBeforeAdvance = false;
+  clearRecordingWords(); replayRecording = false;
   if (recording) {
     recording = false; stopSilenceMonitor(); $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Transcribing answer"); $("record-answer").title = "Transcribing answer"; $("record-answer").disabled = true;
     try {
@@ -417,9 +417,9 @@ async function recordAnswer(automatic = false) {
       answerWords = timedWords.filter((item) => item && typeof item.word === "string" && /[\p{L}\p{N}]/u.test(item.word) && Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).map((item) => ({ word: item.word.trim(), start: item.start, end: item.end }));
       lastRecognitionModel = result.model || ""; updateRecognitionModel();
       if (!typingIntent) {
-        replayBeforeAdvance = autoAdvance && Boolean(answerPlayback);
+        replayRecording = Boolean(answerPlayback);
         $("answer-text").value = result.text.trim(); compare(); renderRecordingWords();
-        if (replayBeforeAdvance) replayAnswerForAutoNext();
+        if (replayRecording) replayAnswerRecording();
       }
     } catch (error) { toast(error.message || String(error)); }
     finally { mediaRecorder = null; audioChunks = []; $("record-answer").disabled = !phrases[index] || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; }
@@ -481,7 +481,7 @@ function bind() {
   });
   $("play-answer-recording").addEventListener("click", async () => {
     if (!answerPlayback) return;
-    stopRecordingWordPlayback(); replayBeforeAdvance = false;
+    stopRecordingWordPlayback(); replayRecording = false;
     if (!answerPlayback.paused) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); return; }
     try { await answerPlayback.play(); setAnswerPlaybackIcon(true); } catch (error) { toast(error.message || "Could not play this recording."); }
   });
