@@ -60,10 +60,10 @@
 #answer-text::placeholder { color:var(--muted); }
 #answer-text:focus { background:transparent; }
 #answer-text:disabled { opacity:.62; }
-.recording-words { display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:9px; }
-.recording-words[hidden] { display:none; }
-.recording-words-list { display:flex;flex-wrap:wrap;gap:6px; }
-.recording-word { border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--text);padding:3px 8px;font-size:.92rem;line-height:1.35;cursor:pointer;transition:background .15s,border-color .15s,color .15s; }
+.recording-words { display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:9px;min-height:30px; }
+.recording-words[hidden] { display:flex;visibility:hidden; }
+.recording-words-list { display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1;min-width:0; }
+.recording-word { flex:none;white-space:nowrap;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--text);padding:3px 8px;font-size:.92rem;line-height:1.35;cursor:pointer;transition:background .15s,border-color .15s,color .15s; }
 .recording-word:hover,.recording-word:focus-visible,.recording-word.is-playing { background:var(--accent-soft);border-color:var(--accent);color:var(--accent);outline:none; }
 .word-error { text-decoration:underline wavy var(--danger);text-decoration-thickness:1.5px;text-underline-offset:3px; }
 .practice-actions { display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:13px; }
@@ -71,7 +71,7 @@
 #record-answer[data-recording="true"] { color:var(--danger);border-color:var(--danger); }
 #record-answer[data-recording="true"] svg circle { fill:var(--danger); }
 .skip-button { margin-left:auto; }
-.answer-status { color:var(--ok);font-weight:650;font-size:.9rem; }
+.answer-status { flex:1 1 auto;min-width:0;min-height:1.45em;line-height:1.4;overflow-wrap:anywhere;color:var(--ok);font-weight:650;font-size:.9rem; }
 .answer-status[data-kind="error"] { color:var(--danger); }
 .sf-library .card-head { align-items:flex-start;margin-bottom:12px; }
 .sf-library .card-head h2 { margin:0 0 5px;font-size:1rem; }
