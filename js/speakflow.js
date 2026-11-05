@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 const LIST_KEY = "speakflow.phrases.v1";
 const PROGRESS_KEY = "speakflow.progress.v1";
 const AUTO_NEXT_KEY = "speakflow.auto-next.v1";
+const FAVORITES_KEY = "speakflow.favorites.v1";
 const THEME_KEY = "speaking-analyzer-theme";
 let phrases = [];
 let index = 0;
@@ -23,6 +24,8 @@ let answerPlayback = null;
 let answerWords = [];
 let wordPlaybackTimer = null;
 let wordPlaybackButton = null;
+let replayBeforeAdvance = false;
+let favorites = [];
 let silenceContext = null;
 let silenceAnalyser = null;
 let silenceFrame = 0;
@@ -38,6 +41,18 @@ function setAnswerPlaybackIcon(playing) {
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
   button.setAttribute("aria-label", playing ? "Stop recorded answer" : "Play recorded answer");
   button.title = playing ? "Stop recorded answer" : "Play recorded answer";
+}
+function finishAutoReplay() {
+  const shouldAdvance = replayBeforeAdvance && autoAdvance && advancePending;
+  replayBeforeAdvance = false;
+  if (shouldAdvance) advancePhrase();
+}
+function replayAnswerForAutoNext() {
+  if (!answerPlayback) { finishAutoReplay(); return; }
+  stopRecordingWordPlayback();
+  answerPlayback.onended = () => { setAnswerPlaybackIcon(false); finishAutoReplay(); };
+  answerPlayback.currentTime = 0;
+  answerPlayback.play().then(() => setAnswerPlaybackIcon(true)).catch(() => { setAnswerPlaybackIcon(false); finishAutoReplay(); });
 }
 function stopRecordingWordPlayback() {
   if (!wordPlaybackTimer && !wordPlaybackButton) return;
@@ -71,6 +86,7 @@ function playRecordingWord(wordIndex, button) {
   const item = answerWords[wordIndex];
   if (!item || !answerPlayback) return;
   stopRecordingWordPlayback();
+  replayBeforeAdvance = false;
   const start = Math.max(0, item.start - 0.04);
   const end = Math.max(start + 0.1, item.end + 0.04);
   const play = () => {
@@ -147,6 +163,71 @@ function updateRecognitionModel(model = lastRecognitionModel) {
 }
 function toast(text, kind = "error") { const el = $("toast"); el.textContent = text; el.dataset.kind = kind; el.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { el.hidden = true; }, 2000); }
 function normalize(text) { return String(text || "").normalize("NFKC").toLocaleLowerCase("en-US").match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || []; }
+const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/></svg>';
+function favoriteKey(phrase) { return normalize(phrase?.en || "").join(" "); }
+function loadFavorites() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+    favorites = Array.isArray(saved) ? saved.filter((item) => item && typeof item.en === "string" && item.en.trim()).map(({ en, ua, example }) => ({
+      en: en.trim(),
+      ...(typeof ua === "string" && ua.trim() ? { ua: ua.trim() } : {}),
+      ...(typeof example === "string" && example.trim() ? { example: example.trim() } : {}),
+    })) : [];
+  } catch { favorites = []; }
+}
+function saveFavorites() { try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch { /* favorites stay in memory if storage is unavailable */ } }
+function favoriteIndex(phrase) { const key = favoriteKey(phrase); return favorites.findIndex((item) => favoriteKey(item) === key); }
+function isFavorite(phrase) { return Boolean(phrase?.en) && favoriteIndex(phrase) >= 0; }
+function updateFavoriteIndicators() {
+  const current = phrases[index];
+  const button = $("favorite-phrase");
+  if (button) {
+    const active = isFavorite(current);
+    button.disabled = !current;
+    button.dataset.active = String(active);
+    button.setAttribute("aria-pressed", String(active));
+    button.setAttribute("aria-label", active ? "Remove phrase from favorites" : "Add phrase to favorites");
+    button.title = active ? "Remove phrase from favorites" : "Add phrase to favorites";
+  }
+  document.querySelectorAll(".favorite-toggle").forEach((el) => {
+    const active = favorites.some((item) => favoriteKey(item) === el.dataset.favoriteKey);
+    el.dataset.active = String(active);
+    el.setAttribute("aria-pressed", String(active));
+    el.setAttribute("aria-label", active ? "Remove phrase from favorites" : "Add phrase to favorites");
+    el.title = active ? "Remove phrase from favorites" : "Add phrase to favorites";
+  });
+}
+function toggleFavorite(phrase) {
+  if (!phrase?.en) return;
+  const at = favoriteIndex(phrase);
+  if (at >= 0) favorites.splice(at, 1);
+  else favorites.push({ en: phrase.en, ...(phrase.ua ? { ua: phrase.ua } : {}), ...(phrase.example ? { example: phrase.example } : {}) });
+  saveFavorites(); updateFavoriteIndicators();
+  toast(at >= 0 ? "Removed from favorites." : "Added to favorites.", "ok");
+}
+function downloadFavorites() {
+  if (!favorites.length) { toast("No favorite phrases to download yet."); return; }
+  const data = favorites.map(({ en, ua, example }) => ({ en, ua: ua || "", ...(example ? { example } : {}) }));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob); const link = document.createElement("a");
+  link.href = url; link.download = "favorite-phrases.json"; document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const count = favorites.length;
+  favorites = []; saveFavorites(); updateFavoriteIndicators();
+  toast(`Downloaded ${count} favorite phrase${count === 1 ? "" : "s"}.`, "ok");
+}
+function loadFavoritesIntoApp() {
+  let stored;
+  try { stored = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]"); }
+  catch { stored = null; }
+  if (!Array.isArray(stored) || !stored.length) { toast("No favorite phrases are saved in this browser yet."); return; }
+  try {
+    const list = validateList(stored);
+    localStorage.setItem(LIST_KEY, JSON.stringify(list)); phrases = list; loadFavorites(); restoreProgress(); renderPhrase();
+    $("list-status").textContent = `Loaded ${list.length} favorite phrase${list.length === 1 ? "" : "s"}.`;
+    toast(`Loaded ${list.length} favorite phrase${list.length === 1 ? "" : "s"} into the app.`, "ok");
+  } catch (error) { toast(`Could not load favorite phrases: ${error.message || "The saved list is invalid."}`); }
+}
 function listSignature() {
   const value = JSON.stringify(phrases); let hash = 2166136261;
   for (let i = 0; i < value.length; i++) { hash ^= value.charCodeAt(i); hash = Math.imul(hash, 16777619); }
@@ -183,7 +264,7 @@ function scheduleAutomaticAdvance(phraseIndex) {
     if (autoAdvance && advancePending && index === phraseIndex) advancePhrase();
   }, 1000);
 }
-function cleanAudio() { stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
+function cleanAudio() { replayBeforeAdvance = false; stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
 function stopRecordingForTyping() {
   typingIntent = true;
   if (!recording) {
@@ -204,14 +285,19 @@ function renderList() {
   if (!phrases.length) { list.innerHTML = '<div class="empty-state">Your validated phrase list will be saved in this browser.</div>'; $("phrase-count").textContent = "0 phrases"; }
   else {
     phrases.forEach((phrase, phraseIndex) => {
-      const row = document.createElement("button"); row.type = "button"; row.className = "phrase-row"; row.dataset.current = String(phraseIndex === index);
-      row.innerHTML = `<span class="row-index">${phraseIndex + 1}</span><strong></strong>`; row.querySelector("strong").textContent = phrase.en; list.append(row);
-      row.setAttribute("aria-label", `Show details for "${phrase.en}"`);
-      row.addEventListener("click", () => openPhraseDetail(phrase));
+      const row = document.createElement("div"); row.className = "phrase-row"; row.dataset.current = String(phraseIndex === index);
+      const main = document.createElement("button"); main.type = "button"; main.className = "phrase-row-main";
+      main.innerHTML = `<span class="row-index">${phraseIndex + 1}</span><strong></strong>`; main.querySelector("strong").textContent = phrase.en;
+      main.setAttribute("aria-label", `Show details for "${phrase.en}"`);
+      main.addEventListener("click", () => openPhraseDetail(phrase));
+      const star = document.createElement("button"); star.type = "button"; star.className = "favorite-toggle"; star.dataset.favoriteKey = favoriteKey(phrase); star.innerHTML = STAR_SVG;
+      star.addEventListener("click", () => toggleFavorite(phrase));
+      row.append(main, star); list.append(row);
     });
     $("phrase-count").textContent = `${phrases.length} phrase${phrases.length === 1 ? "" : "s"}`;
   }
   $("progress-badge").textContent = phrases.length ? `${Math.min(index + 1, phrases.length)} / ${phrases.length}` : "No phrase list";
+  updateFavoriteIndicators();
 }
 function openPhraseDetail(phrase) {
   if (!phrase) return;
@@ -277,7 +363,10 @@ function compare() {
     $("answer-correct").hidden = false;
     $("answer-text").disabled = true;
     updateAdvanceControls();
-    if (autoAdvance) { announce("✓ Correct! Moving to the next phrase…"); scheduleAutomaticAdvance(completedIndex); }
+    if (autoAdvance) {
+      if (replayBeforeAdvance) announce("✓ Correct! Replaying your recording…");
+      else { announce("✓ Correct! Moving to the next phrase…"); scheduleAutomaticAdvance(completedIndex); }
+    }
     else { announce("✓ Correct! Select Next phrase when you are ready."); $("answer-status").dataset.kind = "ok"; }
   }
   else if (!correct) { announce(actual.length === expected.length ? "Some words do not match yet." : `Word count: ${actual.length} of ${expected.length}.`); }
@@ -311,7 +400,7 @@ async function importFile(file) {
   finally { $("json-file").value = ""; }
 }
 async function recordAnswer(automatic = false) {
-  clearRecordingWords();
+  clearRecordingWords(); replayBeforeAdvance = false;
   if (recording) {
     recording = false; stopSilenceMonitor(); $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Transcribing answer"); $("record-answer").title = "Transcribing answer"; $("record-answer").disabled = true;
     try {
@@ -327,7 +416,11 @@ async function recordAnswer(automatic = false) {
       const timedWords = Array.isArray(result.words) ? result.words : [];
       answerWords = timedWords.filter((item) => item && typeof item.word === "string" && /[\p{L}\p{N}]/u.test(item.word) && Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).map((item) => ({ word: item.word.trim(), start: item.start, end: item.end }));
       lastRecognitionModel = result.model || ""; updateRecognitionModel();
-      if (!typingIntent) { $("answer-text").value = result.text.trim(); compare(); renderRecordingWords(); }
+      if (!typingIntent) {
+        replayBeforeAdvance = autoAdvance && Boolean(answerPlayback);
+        $("answer-text").value = result.text.trim(); compare(); renderRecordingWords();
+        if (replayBeforeAdvance) replayAnswerForAutoNext();
+      }
     } catch (error) { toast(error.message || String(error)); }
     finally { mediaRecorder = null; audioChunks = []; $("record-answer").disabled = !phrases[index] || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; }
     return;
@@ -357,6 +450,9 @@ function bind() {
   $("tts-rate").addEventListener("change", () => setGoogleSpeechRate($("tts-rate").value));
   $("theme-toggle").addEventListener("click", () => { const dark = document.documentElement.dataset.theme !== "dark"; const theme = dark ? "dark" : "light"; document.documentElement.dataset.theme = theme; try { localStorage.setItem(THEME_KEY, theme); } catch {} $("theme-toggle").setAttribute("aria-pressed", String(dark)); $("theme-toggle").title = dark ? "Switch to light theme" : "Switch to dark theme"; });
   $("open-list").addEventListener("click", () => $("list-modal").showModal()); $("list-modal").addEventListener("click", (event) => { if (event.target === $("list-modal")) $("list-modal").close(); }); $("open-json").addEventListener("click", () => $("json-file").click()); $("json-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
+  $("download-favorites").addEventListener("click", downloadFavorites);
+  $("upload-favorites").addEventListener("click", loadFavoritesIntoApp);
+  $("favorite-phrase").addEventListener("click", () => toggleFavorite(phrases[index]));
   $("reveal-text").addEventListener("click", () => { const hidden = $("phrase-text").classList.toggle("is-hidden"); $("reveal-text").setAttribute("aria-label", hidden ? "Show phrase" : "Hide phrase"); $("reveal-text").title = hidden ? "Show phrase" : "Hide phrase"; });
   $("phrase-example").addEventListener("click", () => { const example = phrases[index]?.example; if (!example) return; $("example-content").textContent = example; $("example-modal").showModal(); });
   $("close-example").addEventListener("click", () => $("example-modal").close());
@@ -385,7 +481,7 @@ function bind() {
   });
   $("play-answer-recording").addEventListener("click", async () => {
     if (!answerPlayback) return;
-    stopRecordingWordPlayback();
+    stopRecordingWordPlayback(); replayBeforeAdvance = false;
     if (!answerPlayback.paused) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); return; }
     try { await answerPlayback.play(); setAnswerPlaybackIcon(true); } catch (error) { toast(error.message || "Could not play this recording."); }
   });
@@ -393,6 +489,7 @@ function bind() {
   ["setting-provider", "setting-gemini", "setting-groq"].forEach((id) => $(id).addEventListener(id === "setting-provider" ? "change" : "input", () => { saveSettings(); if (id === "setting-provider") { lastRecognitionModel = ""; updateRecognitionModel(); } }));
   $("settings-modal").addEventListener("click", (event) => { if (event.target === $("settings-modal")) $("settings-modal").close(); });
   try { phrases = validateList(JSON.parse(localStorage.getItem(LIST_KEY) || "[]")); restoreProgress(); $("list-status").textContent = phrases.length ? `${phrases.length} phrases loaded.` : "Open a JSON file with English phrases to begin."; } catch { phrases = []; index = 0; try { localStorage.removeItem(LIST_KEY); } catch {} }
+  loadFavorites();
   renderPhrase();
 }
 document.addEventListener("DOMContentLoaded", bind);
