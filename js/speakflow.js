@@ -263,8 +263,6 @@ function updateAdvanceControls() {
   button.setAttribute("aria-pressed", String(autoAdvance));
   button.setAttribute("aria-label", `Automatic next is ${autoAdvance ? "on" : "off"}`);
   button.title = autoAdvance ? "Turn automatic next off" : "Turn automatic next on";
-  $("manual-next").hidden = autoAdvance;
-  $("manual-next").disabled = !advancePending;
 }
 function scheduleAutomaticAdvance(phraseIndex) {
   clearTimeout(advanceTimer);
@@ -376,7 +374,7 @@ function compare() {
       if (replayRecording) announce("✓ Correct! Replaying your recording…");
       else { announce("✓ Correct! Moving to the next phrase…"); scheduleAutomaticAdvance(completedIndex); }
     }
-    else { announce("✓ Correct! Select Next phrase when you are ready."); $("answer-status").dataset.kind = "ok"; }
+    else { announce("✓ Correct! Use Skip when you are ready for the next phrase."); $("answer-status").dataset.kind = "ok"; }
   }
   else if (!correct) { announce(actual.length === expected.length ? "Some words do not match yet." : `Word count: ${actual.length} of ${expected.length}.`); }
   return correct;
@@ -511,14 +509,13 @@ function bind() {
   $("answer-text").addEventListener("input", () => { autoRetryRecording = false; clearRecordingWords(); if ($("answer-text").value.trim()) compare(); else { renderHighlights(); announce(""); } });
   $("answer-text").addEventListener("scroll", () => { $("answer-highlight").scrollTop = $("answer-text").scrollTop; });
   $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; stopWasAutomatic = false; void recordAnswer(); });
-  $("manual-next").addEventListener("click", () => { if (!autoAdvance && advancePending) advancePhrase(); });
   $("toggle-auto-next").addEventListener("click", () => {
     autoAdvance = !autoAdvance;
     try { localStorage.setItem(AUTO_NEXT_KEY, String(autoAdvance)); } catch { /* setting still applies for this session */ }
     updateAdvanceControls();
     if (advancePending) {
       if (autoAdvance) scheduleAutomaticAdvance(index);
-      else { clearTimeout(advanceTimer); advanceTimer = null; announce("✓ Correct! Select Next phrase when you are ready."); $("answer-status").dataset.kind = "ok"; }
+      else { clearTimeout(advanceTimer); advanceTimer = null; announce("✓ Correct! Use Skip when you are ready for the next phrase."); $("answer-status").dataset.kind = "ok"; }
     }
   });
   $("play-answer-recording").addEventListener("click", async () => {

@@ -51,7 +51,6 @@
 .answer-heading-actions #toggle-auto-next[data-active="true"] { background:#16834a;color:#fff;border-color:#116b3b;box-shadow:0 0 0 2px color-mix(in srgb,#16834a 24%,transparent); }
 .answer-heading-actions #toggle-auto-next[data-active="false"] { background:var(--button-bg);color:var(--muted);border-color:var(--line);box-shadow:none; }
 :root[data-theme="dark"] .answer-heading-actions #toggle-auto-next[data-active="true"] { background:#23834f;color:#fff;border-color:#36a269;box-shadow:0 0 0 2px color-mix(in srgb,#36a269 28%,transparent); }
-#manual-next[hidden] { display:none; }
 .record-answer-button { flex:0 0 auto; }
 #play-answer-recording svg path { fill:currentColor;stroke:none; }
 .answer-editor { position:relative; }
