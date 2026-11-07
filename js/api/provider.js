@@ -1,7 +1,7 @@
 import { getProviderId, getSettings, PROVIDERS } from "../config.js";
 import { AppError, ErrorCode, ERROR_MESSAGES } from "../errors.js";
 import { geminiGenerateJson, geminiTranscribe, testGemini } from "./gemini.js?v=analysis-transcription-guard-1";
-import { groqGenerateJson, groqTranscribe, testGroq } from "./groq.js?v=model-report-20261030";
+import { groqGenerateJson, groqTranscribe, testGroq } from "./groq.js?v=groq-400-fallback-1";
 
 function requireKey() {
   const settings = getSettings();

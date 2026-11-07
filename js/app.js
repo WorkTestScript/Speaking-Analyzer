@@ -7,7 +7,7 @@ import {
 import { loadDraft, saveDraft, saveAnalysisSnapshot, loadAnalysisSnapshot, deleteAnalysisSnapshot } from "./storage.js";
 import { AudioRecorder, recordingSupported } from "./audio.js";
 import { analyzeText, applySpanFix, shiftIssues } from "./text-analysis.js?v=gemini-timeout-fallback-20261030";
-import { testConnection, transcribeAudio } from "./api/provider.js?v=gemini-timeout-fallback-20261030";
+import { testConnection, transcribeAudio } from "./api/provider.js?v=groq-400-fallback-1";
 import { messageFor } from "./errors.js";
 
 const $ = (id) => document.getElementById(id);

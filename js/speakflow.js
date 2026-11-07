@@ -1,5 +1,5 @@
 import { initConfig, getSettings, updateSettings, MODELS } from "./config.js";
-import { transcribeAudioWithWordTimes } from "./api/provider.js?v=word-timestamps-1";
+import { transcribeAudioWithWordTimes } from "./api/provider.js?v=groq-400-fallback-1";
 import { speakGoogleAmerican, stopGoogleSpeech, setGoogleSpeechRate } from "./google-tts.js?v=tts-rate-fix-1";
 
 const $ = (id) => document.getElementById(id);
@@ -25,6 +25,10 @@ let answerWords = [];
 let wordPlaybackTimer = null;
 let wordPlaybackButton = null;
 let replayRecording = false;
+let autoRetryRecording = false;
+let stopWasAutomatic = false;
+let startingRecording = false;
+let stoppingRecording = false;
 let favorites = [];
 let silenceContext = null;
 let silenceAnalyser = null;
@@ -44,8 +48,11 @@ function setAnswerPlaybackIcon(playing) {
 }
 function finishAutoReplay() {
   const shouldAdvance = replayRecording && autoAdvance && advancePending;
+  const shouldRetry = autoRetryRecording && autoAdvance && !advancePending;
   replayRecording = false;
+  autoRetryRecording = false;
   if (shouldAdvance) advancePhrase();
+  else if (shouldRetry) void recordAnswer(true);
 }
 function replayAnswerRecording() {
   if (!answerPlayback) { finishAutoReplay(); return; }
@@ -87,6 +94,7 @@ function playRecordingWord(wordIndex, button) {
   if (!item || !answerPlayback) return;
   stopRecordingWordPlayback();
   replayRecording = false;
+  autoRetryRecording = false;
   const start = Math.max(0, item.start - 0.04);
   const end = Math.max(start + 0.1, item.end + 0.04);
   const play = () => {
@@ -140,6 +148,7 @@ async function monitorSilence() {
         : now - recordingStartedAt >= 6000;
       if (silenceExpired) {
         silenceStopTriggered = true; silenceFrame = 0;
+        stopWasAutomatic = true;
         announce("Silence detected. Transcribing…");
         void recordAnswer();
         return;
@@ -240,13 +249,13 @@ function restoreProgress() {
     else index = 0;
   } catch { index = 0; }
 }
-function advancePhrase() {
+function advancePhrase(playPhrase = false) {
   clearRecordingWords();
   if (!phrases.length) return;
   index = index + 1 < phrases.length ? index + 1 : 0;
   try { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ signature: listSignature(), index })); } catch { /* keep the current session usable if storage is unavailable */ }
   renderPhrase();
-  if (autoAdvance) void playCurrentPhrase();
+  if (autoAdvance || playPhrase) void playCurrentPhrase();
 }
 function updateAdvanceControls() {
   const button = $("toggle-auto-next");
@@ -264,7 +273,7 @@ function scheduleAutomaticAdvance(phraseIndex) {
     if (autoAdvance && advancePending && index === phraseIndex) advancePhrase();
   }, 1000);
 }
-function cleanAudio() { replayRecording = false; stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
+function cleanAudio() { replayRecording = false; autoRetryRecording = false; stopWasAutomatic = false; stopSilenceMonitor(); if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); mediaRecorder = null; audioChunks = []; recording = false; if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; } $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; if (answerPlayback) { answerPlayback.pause(); answerPlayback.removeAttribute("src"); answerPlayback.load(); answerPlayback = null; } if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; } $("play-answer-recording").disabled = true; setAnswerPlaybackIcon(false); }
 function stopRecordingForTyping() {
   typingIntent = true;
   if (!recording) {
@@ -384,7 +393,7 @@ function renderHighlights(expected = normalize(phrases[index]?.en || "")) {
   output.append(document.createTextNode(raw.slice(last) || (raw.endsWith("\n") ? "\u00a0" : "")));
   output.scrollTop = $("answer-text").scrollTop;
 }
-function nextPhrase() { advancePhrase(); }
+function nextPhrase() { advancePhrase(true); }
 function validateList(data) {
   if (!Array.isArray(data) || !data.length) throw new Error("The JSON file must contain a non-empty array of phrase objects.");
   if (data.some((item) => !item || typeof item !== "object" || Array.isArray(item) || typeof item.en !== "string" || !item.en.trim() || typeof item.ua !== "string" || !item.ua.trim() || ("example" in item && typeof item.example !== "string"))) throw new Error('Every item needs non-empty "en" and "ua" strings. The optional "example" value must be a string.');
@@ -399,13 +408,31 @@ async function importFile(file) {
   } catch (error) { toast(`Could not open phrase list: ${error.message || "The file is invalid."}`); }
   finally { $("json-file").value = ""; }
 }
+function resetRecordingSession() {
+  stopSilenceMonitor();
+  if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; }
+  mediaRecorder = null; audioChunks = []; recording = false;
+  const button = $("record-answer");
+  button.dataset.recording = "false";
+  button.disabled = !phrases[index] || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
+  button.setAttribute("aria-label", "Record answer");
+  button.title = "Record answer";
+}
 async function recordAnswer(automatic = false) {
-  clearRecordingWords(); replayRecording = false;
+  if (stoppingRecording || startingRecording) return;
+  clearRecordingWords(); replayRecording = false; autoRetryRecording = false;
   if (recording) {
+    stoppingRecording = true;
+    const stoppedAutomatically = stopWasAutomatic; stopWasAutomatic = false;
     recording = false; stopSilenceMonitor(); $("record-answer").dataset.recording = "false"; $("record-answer").setAttribute("aria-label", "Transcribing answer"); $("record-answer").title = "Transcribing answer"; $("record-answer").disabled = true;
     try {
       const recorder = mediaRecorder; const capturedChunks = audioChunks;
-      const blob = await new Promise((resolve, reject) => { recorder.onstop = () => resolve(new Blob(capturedChunks, { type: recorder.mimeType || "audio/webm" })); recorder.onerror = () => reject(new Error("Microphone recording failed.")); recorder.stop(); });
+      const blob = await new Promise((resolve, reject) => {
+        const finish = () => resolve(new Blob(capturedChunks, { type: recorder.mimeType || "audio/webm" }));
+        recorder.onstop = finish;
+        recorder.onerror = () => reject(new Error("Microphone recording failed."));
+        try { if (recorder.state === "inactive") finish(); else recorder.stop(); } catch (error) { reject(error); }
+      });
       stream?.getTracks().forEach((track) => track.stop()); stream = null; mediaRecorder = null; audioChunks = [];
       if (!blob.size) throw new Error("No audio was captured.");
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -418,16 +445,30 @@ async function recordAnswer(automatic = false) {
       lastRecognitionModel = result.model || ""; updateRecognitionModel();
       if (!typingIntent) {
         replayRecording = Boolean(answerPlayback);
-        $("answer-text").value = result.text.trim(); compare(); renderRecordingWords();
+        $("answer-text").value = result.text.trim();
+        const correct = compare();
+        if (!correct && autoAdvance && stoppedAutomatically) autoRetryRecording = true;
+        renderRecordingWords();
         if (replayRecording) replayAnswerRecording();
+        else finishAutoReplay();
       }
-    } catch (error) { toast(error.message || String(error)); }
-    finally { mediaRecorder = null; audioChunks = []; $("record-answer").disabled = !phrases[index] || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("record-answer").setAttribute("aria-label", "Record answer"); $("record-answer").title = "Record answer"; }
+    } catch (error) {
+      resetRecordingSession();
+      announce(error.message || "Recording failed. Try again.", "error");
+      toast(error.message || String(error));
+    }
+    finally {
+      stoppingRecording = false;
+      mediaRecorder = null; audioChunks = [];
+      if (!recording) resetRecordingSession();
+    }
     return;
   }
   if (automatic && typingIntent) return;
+  startingRecording = true;
   try {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("Microphone recording is not supported in this browser.");
+    if (answerPlayback) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); }
     $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-correct").hidden = true; advancePending = false; clearTimeout(advanceTimer); advanceTimer = null; updateAdvanceControls(); clearRecordingWords();
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) { silenceContext = new AudioContextClass(); if (silenceContext.state !== "running") await silenceContext.resume(); }
@@ -438,7 +479,8 @@ async function recordAnswer(automatic = false) {
     mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream); audioChunks = [];
     mediaRecorder.ondataavailable = (event) => { if (event.data?.size) audioChunks.push(event.data); };
     mediaRecorder.start(200); recording = true; recordingStartedAt = Date.now(); $("record-answer").dataset.recording = "true"; $("record-answer").disabled = false; $("record-answer").setAttribute("aria-label", "Stop recording and transcribe"); $("record-answer").title = "Stop recording and transcribe"; announce("Listening…"); void monitorSilence();
-  } catch (error) { cleanAudio(); toast(error.message || String(error)); }
+  } catch (error) { cleanAudio(); announce(error.message || "Could not start recording.", "error"); toast(error.message || String(error)); }
+  finally { startingRecording = false; }
 }
 function applySettings() { const settings = getSettings(); $("setting-provider").value = settings.provider; $("setting-gemini").value = settings.geminiApiKey; $("setting-groq").value = settings.groqApiKey; }
 function saveSettings() { updateSettings({ provider: $("setting-provider").value, geminiApiKey: $("setting-gemini").value.trim(), groqApiKey: $("setting-groq").value.trim() }); }
@@ -466,9 +508,9 @@ function bind() {
     try { await speakGoogleAmerican(word, { rate: Number($("tts-rate").value) }); } catch (error) { toast(error.message || String(error)); }
   });
   $("answer-text").addEventListener("focus", stopRecordingForTyping);
-  $("answer-text").addEventListener("input", () => { clearRecordingWords(); if ($("answer-text").value.trim()) compare(); else { renderHighlights(); announce(""); } });
+  $("answer-text").addEventListener("input", () => { autoRetryRecording = false; clearRecordingWords(); if ($("answer-text").value.trim()) compare(); else { renderHighlights(); announce(""); } });
   $("answer-text").addEventListener("scroll", () => { $("answer-highlight").scrollTop = $("answer-text").scrollTop; });
-  $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; void recordAnswer(); });
+  $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; stopWasAutomatic = false; void recordAnswer(); });
   $("manual-next").addEventListener("click", () => { if (!autoAdvance && advancePending) advancePhrase(); });
   $("toggle-auto-next").addEventListener("click", () => {
     autoAdvance = !autoAdvance;
@@ -481,7 +523,7 @@ function bind() {
   });
   $("play-answer-recording").addEventListener("click", async () => {
     if (!answerPlayback) return;
-    stopRecordingWordPlayback(); replayRecording = false;
+    stopRecordingWordPlayback(); replayRecording = false; autoRetryRecording = false;
     if (!answerPlayback.paused) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); return; }
     try { await answerPlayback.play(); setAnswerPlaybackIcon(true); } catch (error) { toast(error.message || "Could not play this recording."); }
   });

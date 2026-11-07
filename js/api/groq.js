@@ -156,7 +156,26 @@ export async function groqTranscribe(apiKey, blob, mimeType, { language = "en" }
   );
   if (!response.ok) {
     const raw = await readErrorBody(response);
-    throw new AppError(classifyHttpError(response.status, raw), ERROR_MESSAGES[classifyHttpError(response.status, raw)]);
+    if (response.status === 400) {
+      try {
+        const retryForm = new FormData();
+        retryForm.append("file", new File([blob], `recording.${ext}`, { type: type.split(";")[0] }));
+        retryForm.append("model", MODELS.groqWhisper);
+        retryForm.append("response_format", "json");
+        retryForm.append("language", language.startsWith("en") ? "en" : language);
+        const retry = await fetchWithTimeout(
+          ENDPOINTS.groqTranscriptions,
+          { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: retryForm },
+          120000
+        );
+        if (retry.ok) {
+          const data = await retry.json();
+          return { text: data.text || "", words: [], timestampsAvailable: false, model: data.model || MODELS.groqWhisper };
+        }
+      } catch { /* fall through to the original transcription error */ }
+    }
+    const code = classifyHttpError(response.status, raw);
+    throw new AppError(code, ERROR_MESSAGES[code]);
   }
   const data = await response.json();
   const words = Array.isArray(data.words)
