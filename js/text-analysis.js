@@ -1,4 +1,4 @@
-import { generateJson } from "./api/provider.js?v=analysis-policy-1";
+import { generateJson } from "./api/provider.js?v=provider-key-2";
 import { AppError, ErrorCode, ERROR_MESSAGES } from "./errors.js";
 
 const SYSTEM = `You are a structured English-language analysis engine for Ukrainian learners targeting B2. You are not a conversational assistant or question-answering system.

@@ -1,5 +1,5 @@
 import { initConfig, getSettings, updateSettings, MODELS } from "./config.js";
-import { transcribeAudioWithWordTimes } from "./api/provider.js?v=groq-400-fallback-1";
+import { transcribeAudioWithWordTimes } from "./api/provider.js?v=provider-key-2";
 import { speakGoogleAmerican, stopGoogleSpeech, setGoogleSpeechRate } from "./google-tts.js?v=tts-rate-fix-1";
 
 const $ = (id) => document.getElementById(id);
@@ -329,7 +329,7 @@ function renderPhrase() {
   $("phrase-translation-text").textContent = translation; $("phrase-translation").hidden = !translation;
   $("phrase-example").hidden = !example; $("example-content").textContent = example;
   if ($("example-modal").open) $("example-modal").close();
-  $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-text").disabled = !phrase; $("record-answer").disabled = !phrase || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("skip-phrase").disabled = !phrase;
+  $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-text").disabled = !phrase; $("record-answer").disabled = !phrase || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder; $("next-phrase").disabled = !phrase;
   $("phrase-play").disabled = !phrase; setPhrasePlayState(false);
   announce(""); renderList();
 }
@@ -374,7 +374,7 @@ function compare() {
       if (replayRecording) announce("✓ Correct! Replaying your recording…");
       else { announce("✓ Correct! Moving to the next phrase…"); scheduleAutomaticAdvance(completedIndex); }
     }
-    else { announce("✓ Correct! Use Skip when you are ready for the next phrase."); $("answer-status").dataset.kind = "ok"; }
+    else { announce("✓ Correct! Use Next phrase when you are ready for the next phrase."); $("answer-status").dataset.kind = "ok"; }
   }
   else if (!correct) { announce(actual.length === expected.length ? "Some words do not match yet." : `Word count: ${actual.length} of ${expected.length}.`); }
   return correct;
@@ -508,14 +508,14 @@ function bind() {
   $("answer-text").addEventListener("focus", stopRecordingForTyping);
   $("answer-text").addEventListener("input", () => { autoRetryRecording = false; clearRecordingWords(); if ($("answer-text").value.trim()) compare(); else { renderHighlights(); announce(""); } });
   $("answer-text").addEventListener("scroll", () => { $("answer-highlight").scrollTop = $("answer-text").scrollTop; });
-  $("skip-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; stopWasAutomatic = false; void recordAnswer(); });
+  $("next-phrase").addEventListener("click", nextPhrase); $("record-answer").addEventListener("click", () => { typingIntent = false; stopWasAutomatic = false; void recordAnswer(); });
   $("toggle-auto-next").addEventListener("click", () => {
     autoAdvance = !autoAdvance;
     try { localStorage.setItem(AUTO_NEXT_KEY, String(autoAdvance)); } catch { /* setting still applies for this session */ }
     updateAdvanceControls();
     if (advancePending) {
       if (autoAdvance) scheduleAutomaticAdvance(index);
-      else { clearTimeout(advanceTimer); advanceTimer = null; announce("✓ Correct! Use Skip when you are ready for the next phrase."); $("answer-status").dataset.kind = "ok"; }
+      else { clearTimeout(advanceTimer); advanceTimer = null; announce("✓ Correct! Use Next phrase when you are ready for the next phrase."); $("answer-status").dataset.kind = "ok"; }
     }
   });
   $("play-answer-recording").addEventListener("click", async () => {

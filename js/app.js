@@ -1,13 +1,13 @@
 import {
   initConfig,
   getSettings,
+  getProviderDetails,
   updateSettings,
-  PROVIDERS,
 } from "./config.js";
 import { loadDraft, saveDraft, saveAnalysisSnapshot, loadAnalysisSnapshot, deleteAnalysisSnapshot } from "./storage.js";
 import { AudioRecorder, recordingSupported } from "./audio.js";
-import { analyzeText, applySpanFix, shiftIssues } from "./text-analysis.js?v=gemini-timeout-fallback-20261030";
-import { testConnection, transcribeAudio } from "./api/provider.js?v=groq-400-fallback-1";
+import { analyzeText, applySpanFix, shiftIssues } from "./text-analysis.js?v=provider-key-2";
+import { testConnection, transcribeAudio } from "./api/provider.js?v=provider-key-2";
 import { messageFor } from "./errors.js";
 
 const $ = (id) => document.getElementById(id);
@@ -144,7 +144,7 @@ function updateCounts() {
 }
 
 function providerLabel() {
-  return getSettings().provider === PROVIDERS.groq ? "Groq" : "Gemini";
+  return getProviderDetails().label;
 }
 
 function refreshProviderBadge() {
@@ -585,7 +585,11 @@ function bind() {
       void clearTextAnalysis();
     }
   });
-  $("btn-clear").addEventListener("click", async () => {
+  $("btn-clear").addEventListener("click", () => showDialog($("clear-modal")));
+  $("clear-close").addEventListener("click", () => $("clear-modal").close());
+  $("clear-cancel").addEventListener("click", () => $("clear-modal").close());
+  $("clear-accept").addEventListener("click", async () => {
+    $("clear-modal").close();
     $("source-text").value = "";
     await clearTextAnalysis();
     updateCounts();
@@ -673,11 +677,12 @@ function bind() {
   ["setting-provider"].forEach((id) => $(id).addEventListener("change", saveSettingsFromForm));
   $("btn-test-connection").addEventListener("click", async () => {
     const provider = $("setting-provider").value;
-    const apiKey = provider === PROVIDERS.groq ? $("setting-groq").value.trim() : $("setting-gemini").value.trim();
+    const details = getProviderDetails(provider);
+    const apiKey = $(`setting-${provider}`)?.value.trim() || "";
     $("test-result").textContent = "Testing…";
     try {
       await testConnection(provider, apiKey);
-      $("test-result").textContent = `${provider === "groq" ? "Groq" : "Gemini"} connection succeeded.`;
+      $("test-result").textContent = `${details.label} connection succeeded.`;
       $("test-result").dataset.kind = "ok";
     } catch (error) {
       $("test-result").textContent = messageFor(error);

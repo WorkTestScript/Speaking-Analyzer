@@ -31,7 +31,7 @@
 .phrase-audio { display:flex;align-items:center;gap:8px;border-top:1px solid color-mix(in srgb,var(--line) 68%,transparent);padding-top:13px; }
 .rate-control { order:0;margin-left:0;margin-right:auto; }
 #progress-badge { order:1;margin-left:0;margin-right:0;position:static; }
-#skip-phrase { order:2;margin-left:0; }
+#next-phrase { order:2;margin-left:0; }
 #phrase-play { order:4; }
 .icon-only { width:39px;height:39px; }
 .icon-only svg { width:19px;height:19px; }
@@ -69,7 +69,7 @@
 .practice-actions svg { width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }
 #record-answer[data-recording="true"] { color:var(--danger);border-color:var(--danger); }
 #record-answer[data-recording="true"] svg circle { fill:var(--danger); }
-.skip-button { margin-left:auto; }
+.next-button { margin-left:auto; }
 .answer-status { flex:1 1 auto;min-width:0;min-height:1.45em;line-height:1.4;overflow-wrap:anywhere;color:var(--ok);font-weight:650;font-size:.9rem; }
 .answer-status[data-kind="error"] { color:var(--danger); }
 .sf-library .card-head { align-items:flex-start;margin-bottom:12px; }
@@ -102,5 +102,4 @@
 .phrase-detail-example { margin:0;color:var(--muted);font-size:.92rem;font-style:italic; }
 .phrase-detail-empty { margin:0;color:var(--muted);font-size:.9rem; }
 #settings-modal { padding:0; }
-.settings-description { margin:-5px 0 4px;font-size:.84rem;line-height:1.5; }
-@media(max-width:620px) { .topbar { flex-direction:row;align-items:center;padding:9px 14px; }.sf-brand .subtitle {display:none}.top-actions {gap:5px}.top-actions .analyzer-link {display:none}.top-actions #recognition-model {max-width:115px;font-size:.65rem;padding:5px 7px}.sf-layout {padding:16px 12px}.sf-card,.sf-library {border-radius:16px;padding:18px}.sf-card-top {align-items:flex-start}.practice-actions {gap:7px}.skip-button {margin-left:0}.phrase-row {padding:9px}.answer-heading {flex-wrap:wrap}.answer-heading-actions {gap:5px;margin-left:auto}.answer-heading-actions .icon-only {width:35px;height:35px;padding:7px} }
+@media(max-width:620px) { .topbar { flex-direction:row;align-items:center;padding:9px 14px; }.sf-brand .subtitle {display:none}.top-actions {gap:5px}.top-actions .analyzer-link {display:none}.top-actions #recognition-model {max-width:115px;font-size:.65rem;padding:5px 7px}.sf-layout {padding:16px 12px}.sf-card,.sf-library {border-radius:16px;padding:18px}.sf-card-top {align-items:flex-start}.practice-actions {gap:7px}.next-button {margin-left:0}.phrase-row {padding:9px}.answer-heading {flex-wrap:wrap}.answer-heading-actions {gap:5px;margin-left:auto}.answer-heading-actions .icon-only {width:35px;height:35px;padding:7px} }

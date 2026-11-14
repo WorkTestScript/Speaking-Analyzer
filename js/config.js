@@ -5,6 +5,25 @@ export const PROVIDERS = {
   groq: "groq",
 };
 
+export const PROVIDER_DETAILS = {
+  [PROVIDERS.gemini]: {
+    id: PROVIDERS.gemini,
+    label: "Gemini",
+    keyField: "geminiApiKey",
+    keyPage: "https://aistudio.google.com/app/apikey",
+  },
+  [PROVIDERS.groq]: {
+    id: PROVIDERS.groq,
+    label: "Groq",
+    keyField: "groqApiKey",
+    keyPage: "https://console.groq.com/keys",
+  },
+};
+
+export function getProviderDetails(id = getProviderId()) {
+  return PROVIDER_DETAILS[id] || PROVIDER_DETAILS[PROVIDERS.gemini];
+}
+
 export const MODELS = {
   groqWhisper: "whisper-large-v3-turbo",
 };
@@ -35,7 +54,7 @@ export function getProviderId() {
 }
 
 export function getActiveApiKey() {
-  return getProviderId() === PROVIDERS.groq ? cache.groqApiKey : cache.geminiApiKey;
+  return cache[getProviderDetails().keyField] || "";
 }
 
 export function hasActiveKey() {

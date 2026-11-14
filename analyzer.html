@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer" />
   <title>Speaking Analyzer</title>
   <script>try { document.documentElement.dataset.theme = localStorage.getItem("speaking-analyzer-theme") === "dark" ? "dark" : "light"; } catch { document.documentElement.dataset.theme = "light"; }</script>
-  <link rel="stylesheet" href="css/style.css?v=light-cool-1" />
+  <link rel="stylesheet" href="css/style.css?v=light-cool-3" />
   <link rel="icon" href="assets/icons/mic.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -120,10 +120,12 @@
         Gemini API Key
         <input id="setting-gemini" type="password" autocomplete="off" />
       </label>
+      <p class="key-link">Get a free Gemini API key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</p>
       <label>
         Groq API Key
         <input id="setting-groq" type="password" autocomplete="off" />
       </label>
+      <p class="key-link">Get a free Groq API key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Groq Console</a>.</p>
       <p id="test-result" class="status"></p>
       <div class="cluster">
         <button type="button" id="btn-test-connection" class="btn">Test Connection</button>
@@ -143,6 +145,17 @@
     </div>
   </dialog>
 
-  <script type="module" src="js/app.js?v=groq-400-fallback-1"></script>
+  <dialog id="clear-modal" class="message-dialog" aria-labelledby="clear-title">
+    <button type="button" id="clear-close" class="dialog-close" aria-label="Close dialog" title="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+    </button>
+    <h2 id="clear-title">Clear text?</h2>
+    <div class="cluster message-actions">
+      <button type="button" id="clear-cancel" class="btn btn-ghost">Cancel</button>
+      <button type="button" id="clear-accept" class="btn btn-primary">Clear Text</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="js/app.js?v=clear-confirm-2"></script>
 </body>
 </html>

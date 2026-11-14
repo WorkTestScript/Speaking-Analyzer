@@ -1,14 +1,19 @@
-import { getProviderId, getSettings, PROVIDERS } from "../config.js";
-import { AppError, ErrorCode, ERROR_MESSAGES } from "../errors.js";
+import { getProviderDetails, getProviderId, getSettings, PROVIDERS } from "../config.js";
+import { AppError, ErrorCode } from "../errors.js";
 import { geminiGenerateJson, geminiTranscribe, testGemini } from "./gemini.js?v=analysis-transcription-guard-1";
 import { groqGenerateJson, groqTranscribe, testGroq } from "./groq.js?v=groq-400-fallback-1";
 
+function missingKeyError(details) {
+  return new AppError(
+    ErrorCode.INVALID_API_KEY,
+    `Add a ${details.label} API key in Settings to use ${details.label} models.`
+  );
+}
+
 function requireKey() {
-  const settings = getSettings();
-  const key = getProviderId() === PROVIDERS.groq ? settings.groqApiKey : settings.geminiApiKey;
-  if (!key) {
-    throw new AppError(ErrorCode.INVALID_API_KEY, "Add an API key in Settings before running analysis.");
-  }
+  const details = getProviderDetails();
+  const key = getSettings()[details.keyField];
+  if (!key) throw missingKeyError(details);
   return key;
 }
 
@@ -18,9 +23,11 @@ export function getActiveProvider() {
 
 export async function testConnection(provider, apiKey) {
   const id = provider || getProviderId();
-  const settings = getSettings();
-  const key = apiKey || (id === PROVIDERS.groq ? settings.groqApiKey : settings.geminiApiKey);
-  if (!key) throw new AppError(ErrorCode.INVALID_API_KEY, ERROR_MESSAGES[ErrorCode.INVALID_API_KEY]);
+  const details = getProviderDetails(id);
+  const key = apiKey || getSettings()[details.keyField];
+  if (!key) {
+    throw new AppError(ErrorCode.INVALID_API_KEY, `Enter a ${details.label} API key first.`);
+  }
   return id === PROVIDERS.groq ? testGroq(key) : testGemini(key);
 }
 
