@@ -52,7 +52,7 @@ function finishAutoReplay() {
   replayRecording = false;
   autoRetryRecording = false;
   if (shouldAdvance) advancePhrase();
-  else if (shouldRetry) void recordAnswer(true);
+  else if (shouldRetry) void playCurrentPhrase();
 }
 function replayAnswerRecording() {
   if (!answerPlayback) { finishAutoReplay(); return; }
