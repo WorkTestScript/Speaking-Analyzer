@@ -172,6 +172,9 @@ function updateRecognitionModel(model = lastRecognitionModel) {
 }
 function toast(text, kind = "error") { const el = $("toast"); el.textContent = text; el.dataset.kind = kind; el.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { el.hidden = true; }, 2000); }
 function normalize(text) { return String(text || "").normalize("NFKC").toLocaleLowerCase("en-US").match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || []; }
+const VOICE_COMMANDS = { "stop it": "stop", "next point": "next" };
+// The whole utterance must match; commands embedded in a longer sentence are ignored.
+function detectVoiceCommand(text) { return VOICE_COMMANDS[normalize(text).join(" ")] || ""; }
 const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/></svg>';
 function favoriteKey(phrase) { return normalize(phrase?.en || "").join(" "); }
 function loadFavorites() {
@@ -433,11 +436,22 @@ async function recordAnswer(automatic = false) {
       });
       stream?.getTracks().forEach((track) => track.stop()); stream = null; mediaRecorder = null; audioChunks = [];
       if (!blob.size) throw new Error("No audio was captured.");
+      const result = await transcribeAudioWithWordTimes(blob, blob.type || "audio/webm", { language: "en-US" });
+      if (!result.text?.trim() || /^\s*\[?\s*blank[\s_-]*audio\s*\]?\s*$/i.test(result.text)) throw new Error("No speech detected. Start recording and speak clearly, or type your answer.");
+      const voiceCommand = detectVoiceCommand(result.text);
+      if (voiceCommand) {
+        if (voiceCommand === "next") {
+          nextPhrase();
+          announce("Voice command: next point.");
+        } else {
+          ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false);
+          announce("Voice command: stop.");
+        }
+        return;
+      }
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       audioUrl = URL.createObjectURL(blob); answerPlayback = new Audio(audioUrl); $("play-answer-recording").disabled = false;
       answerPlayback.onended = () => setAnswerPlaybackIcon(false);
-      const result = await transcribeAudioWithWordTimes(blob, blob.type || "audio/webm", { language: "en-US" });
-      if (!result.text?.trim() || /^\s*\[?\s*blank[\s_-]*audio\s*\]?\s*$/i.test(result.text)) throw new Error("No speech detected. Start recording and speak clearly, or type your answer.");
       const timedWords = Array.isArray(result.words) ? result.words : [];
       answerWords = timedWords.filter((item) => item && typeof item.word === "string" && /[\p{L}\p{N}]/u.test(item.word) && Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).map((item) => ({ word: item.word.trim(), start: item.start, end: item.end }));
       lastRecognitionModel = result.model || ""; updateRecognitionModel();
@@ -467,6 +481,7 @@ async function recordAnswer(automatic = false) {
   try {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("Microphone recording is not supported in this browser.");
     if (answerPlayback) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); }
+    ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false);
     $("answer-text").value = ""; $("answer-highlight").replaceChildren(); $("answer-correct").hidden = true; advancePending = false; clearTimeout(advanceTimer); advanceTimer = null; updateAdvanceControls(); clearRecordingWords();
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) { silenceContext = new AudioContextClass(); if (silenceContext.state !== "running") await silenceContext.resume(); }

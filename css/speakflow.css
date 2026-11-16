@@ -102,4 +102,8 @@
 .phrase-detail-example { margin:0;color:var(--muted);font-size:.92rem;font-style:italic; }
 .phrase-detail-empty { margin:0;color:var(--muted);font-size:.9rem; }
 #settings-modal { padding:0; }
+.voice-commands { padding:10px 12px;background:var(--subtle);border:1px solid var(--line);border-radius:10px; }
+.voice-commands-title { margin:0 0 6px;color:var(--muted);font-size:.78rem;font-weight:650;letter-spacing:.04em;text-transform:uppercase; }
+.voice-commands ul { display:grid;gap:4px;margin:0;padding-left:18px;font-size:.84rem;line-height:1.45; }
+.voice-commands strong { color:var(--accent); }
 @media(max-width:620px) { .topbar { flex-direction:row;align-items:center;padding:9px 14px; }.sf-brand .subtitle {display:none}.top-actions {gap:5px}.top-actions .analyzer-link {display:none}.top-actions #recognition-model {max-width:115px;font-size:.65rem;padding:5px 7px}.sf-layout {padding:16px 12px}.sf-card,.sf-library {border-radius:16px;padding:18px}.sf-card-top {align-items:flex-start}.practice-actions {gap:7px}.next-button {margin-left:0}.phrase-row {padding:9px}.answer-heading {flex-wrap:wrap}.answer-heading-actions {gap:5px;margin-left:auto}.answer-heading-actions .icon-only {width:35px;height:35px;padding:7px} }
