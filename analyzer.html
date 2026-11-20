@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer" />
   <title>Speaking Analyzer</title>
   <script>try { document.documentElement.dataset.theme = localStorage.getItem("speaking-analyzer-theme") === "dark" ? "dark" : "light"; } catch { document.documentElement.dataset.theme = "light"; }</script>
-  <link rel="stylesheet" href="css/style.css?v=light-cool-6" />
+  <link rel="stylesheet" href="css/style.css?v=light-cool-7" />
   <link rel="icon" href="assets/icons/mic.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -133,7 +133,7 @@
     </form>
   </dialog>
 
-  <dialog id="message-modal" class="message-dialog" aria-labelledby="message-title" aria-describedby="message-body">
+  <dialog id="message-modal" class="message-dialog compact-dialog" aria-labelledby="message-title" aria-describedby="message-body">
     <button type="button" id="message-close" class="dialog-close" aria-label="Close dialog" title="Close">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
     </button>
@@ -145,7 +145,7 @@
     </div>
   </dialog>
 
-  <dialog id="clear-modal" class="message-dialog clear-dialog" aria-labelledby="clear-title">
+  <dialog id="clear-modal" class="message-dialog compact-dialog" aria-labelledby="clear-title">
     <button type="button" id="clear-close" class="dialog-close" aria-label="Close dialog" title="Close">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
     </button>
