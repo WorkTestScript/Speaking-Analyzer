@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer" />
   <title>Speaking Analyzer</title>
   <script>try { document.documentElement.dataset.theme = localStorage.getItem("speaking-analyzer-theme") === "dark" ? "dark" : "light"; } catch { document.documentElement.dataset.theme = "light"; }</script>
-  <link rel="stylesheet" href="css/style.css?v=light-cool-3" />
+  <link rel="stylesheet" href="css/style.css?v=light-cool-6" />
   <link rel="icon" href="assets/icons/mic.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -54,10 +54,10 @@
     </section>
 
     <section class="analysis-panel" hidden>
-      <div class="card-head">
+      <div class="card-head analysis-progress-line">
         <progress id="text-progress" hidden></progress>
+        <p id="text-status" class="status" aria-live="polite"></p>
       </div>
-      <p id="text-status" class="status" aria-live="polite"></p>
       <div id="text-results"></div>
       <div id="text-actions" class="analysis-actions" hidden>
         <button type="button" id="btn-apply-all" class="btn btn-primary">Replace with corrected text</button>
@@ -145,17 +145,17 @@
     </div>
   </dialog>
 
-  <dialog id="clear-modal" class="message-dialog" aria-labelledby="clear-title">
+  <dialog id="clear-modal" class="message-dialog clear-dialog" aria-labelledby="clear-title">
     <button type="button" id="clear-close" class="dialog-close" aria-label="Close dialog" title="Close">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
     </button>
     <h2 id="clear-title">Clear text?</h2>
     <div class="cluster message-actions">
       <button type="button" id="clear-cancel" class="btn btn-ghost">Cancel</button>
-      <button type="button" id="clear-accept" class="btn btn-primary">Clear Text</button>
+      <button type="button" id="clear-accept" class="btn btn-primary">Clear</button>
     </div>
   </dialog>
 
-  <script type="module" src="js/app.js?v=clear-confirm-2"></script>
+  <script type="module" src="js/app.js?v=analysis-progress-1"></script>
 </body>
 </html>

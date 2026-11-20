@@ -353,6 +353,8 @@ async function runTextAnalysis() {
   const text = $("source-text").value;
   state.busy.text = true;
   $("btn-analyze").disabled = true;
+  const analysisPanel = $("text-results").closest(".analysis-panel");
+  if (analysisPanel) analysisPanel.hidden = false;
   $("text-progress").hidden = false;
   setStatus($("text-status"), "Analyzing with " + providerLabel() + "…", "busy");
   try {

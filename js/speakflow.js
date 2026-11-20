@@ -68,6 +68,12 @@ function stopRecordingWordPlayback() {
   if (answerPlayback) { answerPlayback.pause(); answerPlayback.currentTime = 0; }
   setAnswerPlaybackIcon(false);
 }
+function stopAnswerPlayback() {
+  if (!answerPlayback) return;
+  answerPlayback.pause();
+  answerPlayback.currentTime = 0;
+  setAnswerPlaybackIcon(false);
+}
 function clearRecordingWords() {
   stopRecordingWordPlayback();
   answerWords = [];
@@ -354,6 +360,8 @@ async function playCurrentPhrase({ forceRecord = false } = {}) {
   typingIntent = false;
   const phrase = phrases[index]; if (!phrase) return;
   if (ttsBusy) { ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false); return; }
+  replayRecording = false; autoRetryRecording = false;
+  stopRecordingWordPlayback(); stopAnswerPlayback();
   stopGoogleSpeech(); ttsBusy = true; setPhrasePlayState(true);
   try { await speakGoogleAmerican(phrase.en, { rate: Number($("tts-rate").value) }); }
   catch (error) { if (ttsBusy) toast(error.message || String(error)); }
@@ -520,6 +528,8 @@ function bind() {
   $("phrase-play").addEventListener("click", () => { void playCurrentPhrase(); });
   $("phrase-text").addEventListener("click", async (event) => {
     const word = event.target.closest(".phrase-word")?.dataset.word; if (!word) return;
+    replayRecording = false; autoRetryRecording = false;
+    stopRecordingWordPlayback(); stopAnswerPlayback();
     ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false);
     try { await speakGoogleAmerican(word, { rate: Number($("tts-rate").value) }); } catch (error) { toast(error.message || String(error)); }
   });
@@ -538,6 +548,7 @@ function bind() {
   });
   $("play-answer-recording").addEventListener("click", async () => {
     if (!answerPlayback) return;
+    ttsBusy = false; stopGoogleSpeech(); setPhrasePlayState(false);
     stopRecordingWordPlayback(); replayRecording = false; autoRetryRecording = false;
     if (!answerPlayback.paused) { answerPlayback.pause(); answerPlayback.currentTime = 0; setAnswerPlaybackIcon(false); return; }
     try { await answerPlayback.play(); setAnswerPlaybackIcon(true); } catch (error) { toast(error.message || "Could not play this recording."); }
